@@ -1693,6 +1693,10 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
             {
                 // CS2 palettes sit close to their frames (measured on the Color palette).
                 let margin = if self.cs2 { egui::Margin { left: 6, right: 6, top: 7, bottom: 3 } } else { crate::widgets::body_margin(pro) };
+                if self.cs2 {
+                    // CS2 palettes are dense: Tahoma-size text and 19-point controls.
+                    crate::cs2::compact_style(ui);
+                }
                 egui::Frame::NONE.inner_margin(margin).show(ui, |ui| body(self.app, ui, id));
             }
         }

@@ -53,6 +53,10 @@ pub fn load(app: &mut PhotocraftApp) {
     {
         app.ui.color_panel.mode = crate::state::ColorPanelMode::RgbSliders;
     }
+    // CS2's Layers palette had no filter row (it came in CS6).
+    if interface.light_theme == photocraft_engine::prefs::LightTheme::Cs2 && interface.appearance_mode != photocraft_engine::prefs::AppearanceMode::Dark {
+        app.ui.layers_panel_options.show_filters = false;
+    }
     crate::brush_picker::restore(app);
     crate::last_brush::restore(app);
     sync_rulers(app);
