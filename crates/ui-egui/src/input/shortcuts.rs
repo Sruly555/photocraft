@@ -713,10 +713,14 @@ fn handle_pen_and_work_path_keys(app: &mut PhotocraftApp, ctx: &egui::Context, f
     if app.ui.pen.as_ref().is_some_and(|pen| !pen.knots.is_empty()) {
         let mods = ctx.input(|i| i.modifiers);
         // Not while a Free Transform or Crop box owns Undo: Edit › Undo steps the box.
+        // CS2's Undo/Redo key (Ctrl+Z, Toggle Last State) removes the point as well.
+        let undo_keys: &[&str] = if crate::cs2::active() { &["edit.undo", "edit.toggleLastState"] } else { &["edit.undo"] };
         let command_undo = !crate::vector_ui::box_steps(app, "edit.undo")
-            && effective_shortcut(app, "edit.undo", default_shortcut("edit.undo").as_deref())
-                .and_then(|shortcut| parse(&shortcut))
-                .is_some_and(|shortcut| consume(ctx, &shortcut));
+            && undo_keys.iter().any(|id| {
+                effective_shortcut(app, id, default_shortcut(id).as_deref())
+                    .and_then(|shortcut| parse(&shortcut))
+                    .is_some_and(|shortcut| consume(ctx, &shortcut))
+            });
         let remove = !mods.command
             && !mods.ctrl
             && !mods.shift

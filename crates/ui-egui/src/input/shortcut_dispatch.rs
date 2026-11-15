@@ -276,7 +276,7 @@ pub fn dispatch_pressed(app: &mut PhotocraftApp, ctx: &egui::Context, focus: Foc
             // panels instead, #1313): the shortcut took it, so cancel that move.
             ctx.memory_mut(|m| m.move_focus(egui::FocusDirection::None));
         }
-        let id = clip_key_command(app, delete_key_command(app, id));
+        let id = clip_key_command(app, delete_key_command(app, cs2_undo_key(app, id)));
         let owner = key_owner(app, ctx);
         dispatch_as(app, ctx, &id, last);
         ran = true;
@@ -285,6 +285,12 @@ pub fn dispatch_pressed(app: &mut PhotocraftApp, ctx: &egui::Context, focus: Foc
         }
     }
     ran
+}
+
+/// CS2's Ctrl+Z (Undo/Redo, Toggle Last State) steps a Free Transform or Crop box back, as
+/// Undo does there: CS2 had no separate key for it, and Toggle Last State is refused in a box.
+fn cs2_undo_key(app: &PhotocraftApp, id: String) -> String {
+    if crate::cs2::active() && id == "edit.toggleLastState" && crate::vector_ui::box_steps(app, "edit.undo") { "edit.undo".into() } else { id }
 }
 
 /// Clear's key (Delete / Backspace) with nothing selected deletes the selected layers, of any
