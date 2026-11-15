@@ -6,6 +6,13 @@ on:
   workflow_dispatch:
   push:
     branches: [cs2-theme]
+  # Called by cs2-update.yml with the commit it merged (its push can't start this workflow).
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -19,6 +26,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
 
       - name: Check out craft-fonts

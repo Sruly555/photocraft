@@ -1,0 +1,86 @@
+# Personal fork: bring the CS2 branch up to a PhotoCraft release, then build it.
+# Not for upstream. Run it from the Actions tab: "Update to latest PhotoCraft" > Run workflow.
+name: Update to latest PhotoCraft
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'PhotoCraft version to update to (a tag such as v0.21.0, or "main"). Empty = latest release.'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.push.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cs2-theme
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Pick the PhotoCraft version
+        id: target
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WANTED: ${{ inputs.ref }}
+        shell: bash
+        run: |
+          ref="$WANTED"
+          if [ -z "$ref" ]; then
+            ref=$(gh release view -R storytold/photocraft --json tagName -q .tagName)
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Updating to PhotoCraft **$ref**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Merge it into cs2-theme
+        env:
+          REF: ${{ steps.target.outputs.ref }}
+        shell: bash
+        run: |
+          git config user.name "${GITHUB_ACTOR}"
+          git config user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
+          git fetch --no-tags https://github.com/storytold/photocraft "$REF"
+          if git merge-base --is-ancestor FETCH_HEAD HEAD; then
+            echo "Already up to date with $REF." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! git merge --no-edit -m "Merge PhotoCraft $REF into cs2-theme" FETCH_HEAD; then
+            # Cargo.lock always differs (the CS2 libraries are patched in): take PhotoCraft's and
+            # let cargo add the patched libraries back. Any other clash needs a person.
+            others=$(git diff --name-only --diff-filter=U | grep -vx Cargo.lock || true)
+            if [ -n "$others" ]; then
+              {
+                echo "### Stopped: these files clash with the CS2 changes"
+                echo "$others" | sed 's/^/- /'
+                echo
+                echo "Nothing was changed. These need merging by hand."
+              } >> "$GITHUB_STEP_SUMMARY"
+              git merge --abort
+              exit 1
+            fi
+            git checkout --theirs Cargo.lock
+            cargo metadata --format-version 1 > /dev/null
+            git add Cargo.lock
+            git commit --no-edit
+          fi
+
+      - name: Push
+        id: push
+        shell: bash
+        run: |
+          git push origin HEAD:cs2-theme
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: merge
+    uses: ./.github/workflows/cs2-build.yml
+    with:
+      ref: ${{ needs.merge.outputs.sha }}
