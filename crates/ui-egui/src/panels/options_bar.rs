@@ -103,6 +103,10 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 egui::Frame::NONE.inner_margin(egui::Margin { right: 2, ..Default::default() }).show(ui, |ui| {
                     crate::direction::horizontal_centered(ui, |ui| {
                         if crate::theme::is_cs2(&t) {
+                            // CS2's options bar is dense: Tahoma-size text, 19-point controls.
+                            crate::cs2::compact_style(ui);
+                        }
+                        if crate::theme::is_cs2(&t) {
                             // CS2: the options bar's drag grip; Home is not part of CS2.
                             crate::cs2::grip(ui, 20.0);
                         } else if t.pro {

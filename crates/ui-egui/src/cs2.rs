@@ -138,6 +138,8 @@ pub const PALETTE_TAB_PADDING: f32 = 14.5;
 /// Tab label size: Tahoma 8 pt in CS2; PhotoCraft's UI face matches its widths at 9.5 points
 /// on screen, which is 11.4 before the Tiny UI scale CS2 runs at.
 pub const PALETTE_FONT: f32 = 11.4;
+/// CS2's text and number fields: 19 points tall (measured on the Color palette and options bar).
+pub const FIELD_H: f32 = 19.0;
 const TAB_MARGIN: f32 = 4.0;
 const TAB_INSET: f32 = 6.0;
 /// The slope starts 4 points after the label's ink: 1.5 after its laid-out width (measured).
@@ -588,6 +590,18 @@ pub fn palette_well(ui: &mut Ui, labels: &[&str], active: Option<usize>, browse_
     // The well's bottom highlight, over the tab baselines.
     p.line_segment([well.left_bottom() + vec2(0.0, -0.5), well.right_bottom() + vec2(0.0, -0.5)], Stroke::new(1.0, HIGHLIGHT));
     WellDrawn { well, tabs: drawn, browse: b.clicked() }
+}
+
+/// CS2's dense control style for `ui`: Tahoma-size text, 19-point fields and buttons, tight
+/// spacing (the options bar's, measured).
+pub fn compact_style(ui: &mut Ui) {
+    let style = ui.style_mut();
+    for font in style.text_styles.values_mut() {
+        font.size = font.size.min(PALETTE_FONT + 0.6);
+    }
+    style.spacing.interact_size.y = FIELD_H;
+    style.spacing.item_spacing.x = style.spacing.item_spacing.x.min(5.0);
+    style.spacing.button_padding = vec2(4.0, 1.0);
 }
 
 /// Text on a selected list row: white on the Vista selection blue, as in CS2's palettes, so a

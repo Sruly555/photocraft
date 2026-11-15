@@ -195,7 +195,12 @@ pub(super) fn value_field_in(
     opts: FieldOpts,
     name: Option<&str>,
 ) -> (Response, Rect) {
-    value_field_box(ui, value, range, suffix, vec2(width, VALUE_FIELD_H), trailing, opts, name)
+    value_field_box(ui, value, range, suffix, vec2(width, value_field_height(ui)), trailing, opts, name)
+}
+
+/// A value field's height: [`VALUE_FIELD_H`], or CS2's 19-point fields under that theme.
+pub(crate) fn value_field_height(ui: &Ui) -> f32 {
+    if crate::theme::is_cs2(&Tokens::get(ui.ctx())) { crate::cs2::FIELD_H } else { VALUE_FIELD_H }
 }
 
 /// [`value_field_in`] with a box of any `size`.
@@ -246,12 +251,14 @@ fn value_field_box(
     }
     // The number's slot ends 1 pt left of the suffix, by its measured width (the suffix is drawn
     // 6 pt from the right edge), so a one-character unit like `%` leaves the number room (#3040).
-    let suffix_font = theme::mono(11.0);
+    // CS2 sets numbers in the interface face (Tahoma), not a monospace one.
+    let cs2 = crate::theme::is_cs2(&t);
+    let suffix_font = if cs2 { egui::FontId::proportional(crate::cs2::PALETTE_FONT) } else { theme::mono(11.0) };
     let suffix_w = if suffix.is_empty() { 0.0 } else { ui.painter().layout_no_wrap(suffix.to_owned(), suffix_font.clone(), t.text_faint).size().x + 3.0 };
     // Centred: the digits' ink then sits within 0.2 pt of the box's centre, where a 1 pt lift
     // (#1322) put it 0.9 pt high and the focus outline off-centre (#5150). The slot is at least
     // one text row tall, so a slim box's number isn't pushed out of it (#2823).
-    let font = theme::mono(12.0);
+    let font = if cs2 { egui::FontId::proportional(crate::cs2::PALETTE_FONT) } else { theme::mono(12.0) };
     let row_h = ui.painter().layout_no_wrap("0".into(), font.clone(), t.text).size().y;
     let slot_h = (rect.height() - 4.0).max(row_h).min(rect.height() - 2.0);
     let cy = rect.center().y;
