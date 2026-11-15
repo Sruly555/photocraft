@@ -598,17 +598,37 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
     let mut drag_over = None;
     let mac = ui.ctx().os() == egui::os::OperatingSystem::Mac;
     let large_tabs = app.session.prefs().workspace.large_tabs;
-    let font = egui::FontId::proportional(if large_tabs { 13.0 } else { 11.5 });
-    let tab_h = if large_tabs { 34.0 } else { 26.0 };
+    let cs2 = crate::theme::is_cs2(&t);
+    let font = egui::FontId::proportional(if cs2 {
+        crate::cs2::PALETTE_FONT
+    } else if large_tabs {
+        13.0
+    } else {
+        11.5
+    });
+    let tab_h = if cs2 {
+        crate::cs2::DOC_STRIP
+    } else if large_tabs {
+        34.0
+    } else {
+        26.0
+    };
+    let pad = if cs2 { crate::cs2::DOC_TAB_PADDING } else { DOC_TAB_PAD };
     let (strip, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), tab_h), Sense::hover());
-    ui.painter().rect_filled(strip, 0.0, t.tab_strip);
+    // CS2: the tabs are painted together after the loops, so their slopes can overlap.
+    let row = if cs2 { crate::cs2::paint_doc_strip(ui.painter(), strip, t.chrome) } else { strip };
+    if !cs2 {
+        ui.painter().rect_filled(strip, 0.0, t.tab_strip);
+    }
+    let mut cs2_tabs: Vec<crate::cs2::PaletteTab> = Vec::new();
+    let mut cs2_closes: Vec<(Rect, bool, bool)> = Vec::new();
     // Files opening in the background (#210) are tabs too ("name (Opening… 45%)" with a progress
     // underline); they share the fit's index space, after the documents.
     let opening = crate::jobs_ui::open_tabs(app);
     let mut titles: Vec<String> = documents.iter().map(|&i| pro_tab_title(app, i)).collect();
     titles.extend(opening.iter().map(|(_, name, frac)| format!("{name} ({} {:.0}%)", tl!("Opening…"), frac * 100.0)));
     // Every tab's natural width, whether or not it stays on the strip.
-    let natural: Vec<f32> = titles.iter().map(|title| ui.painter().layout_no_wrap(title.clone(), font.clone(), t.text).size().x + DOC_TAB_PAD).collect();
+    let natural: Vec<f32> = titles.iter().map(|title| ui.painter().layout_no_wrap(title.clone(), font.clone(), t.text).size().x + pad).collect();
     let selected = app.jobs.focus.and_then(|job| opening.iter().position(|(open, _, _)| *open == job)).map_or_else(|| active.unwrap_or(0), |p| tab_count + p);
     let f = fit_doc_tabs(&natural, selected, strip.width());
     let mut x = strip.left();
@@ -623,10 +643,11 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
     for &(i, r) in placed.iter().filter(|(i, _)| *i < tab_count) {
         let Some(&doc) = documents.get(i) else { continue };
         let Some(title) = titles.get(i) else { continue };
-        let g = crate::tab_strip::elided(ui, title, font.clone(), t.text, (r.width() - DOC_TAB_PAD).max(1.0));
+        let g = crate::tab_strip::elided(ui, title, font.clone(), t.text, (r.width() - pad).max(1.0));
         let resp = ui.interact(r, ui.scope_id().with(("ptab", doc)), Sense::click_and_drag());
         let sel = Some(i) == active;
-        if sel {
+        if cs2 {
+        } else if sel {
             ui.painter().rect_filled(r, 0.0, t.chrome);
         } else if resp.hovered() {
             ui.painter().rect_filled(r, 0.0, t.hover.gamma_multiply(0.35));
@@ -635,14 +656,26 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
             drag_over = Some(doc);
             ui.painter().rect_stroke(r, 0.0, Stroke::new(1.5, t.accent), egui::StrokeKind::Inside);
         }
-        ui.painter().line_segment([r.right_top(), r.right_bottom()], Stroke::new(1.0, t.separator));
-        let (xr, at) = pro_tab_layout(r, g.size().y, mac);
+        if !cs2 {
+            ui.painter().line_segment([r.right_top(), r.right_bottom()], Stroke::new(1.0, t.separator));
+        }
+        let (xr, at) = if cs2 {
+            let (at, xr) = crate::cs2::doc_tab_layout(r, row, g.size());
+            (xr, at)
+        } else {
+            pro_tab_layout(r, g.size().y, mac)
+        };
         let xresp = ui.interact(xr, ui.scope_id().with(("ptabx", doc)), Sense::click());
         // Painted: name the tab and its × for accessibility (and so tests and agents can find them).
         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, sel, g.text()));
         xresp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tl!("Close")));
-        crate::icons::paint(ui, xr, "x", 10.0, if xresp.hovered() { t.text } else { t.text_faint });
-        ui.painter().galley_with_override_text_color(at, g, if sel { t.text } else { t.text_faint });
+        if cs2 {
+            cs2_tabs.push(crate::cs2::PaletteTab { rect: r, galley: g, active: sel, extra: crate::cs2::DOC_CLOSE_ROOM });
+            cs2_closes.push((xr, sel, xresp.hovered()));
+        } else {
+            crate::icons::paint(ui, xr, "x", 10.0, if xresp.hovered() { t.text } else { t.text_faint });
+            ui.painter().galley_with_override_text_color(at, g, if sel { t.text } else { t.text_faint });
+        }
         let cut = natural.get(i).copied().unwrap_or(0.0) > r.width() + 0.5;
         let resp = if cut { resp.on_hover_text(title.as_str()) } else { resp };
         if tab_close_clicked(&resp, &xresp) {
@@ -664,25 +697,44 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
     for &(i, r) in placed.iter().filter(|(i, _)| *i >= tab_count) {
         let Some((job, _, frac)) = opening.get(i - tab_count) else { continue };
         let Some(title) = titles.get(i) else { continue };
-        let g = crate::tab_strip::elided(ui, title, font.clone(), t.text, (r.width() - DOC_TAB_PAD).max(1.0));
+        let g = crate::tab_strip::elided(ui, title, font.clone(), t.text, (r.width() - pad).max(1.0));
         let resp = ui.interact(r, ui.scope_id().with(("ptabjob", job.0)), Sense::click());
         let sel = app.jobs.focus == Some(*job);
-        if sel {
+        if cs2 {
+        } else if sel {
             ui.painter().rect_filled(r, 0.0, t.chrome);
         } else if resp.hovered() {
             ui.painter().rect_filled(r, 0.0, t.hover.gamma_multiply(0.35));
         }
-        ui.painter().line_segment([r.right_top(), r.right_bottom()], Stroke::new(1.0, t.separator));
+        if !cs2 {
+            ui.painter().line_segment([r.right_top(), r.right_bottom()], Stroke::new(1.0, t.separator));
+        }
         crate::jobs_ui::tab_underline(ui, r, *frac, &t);
-        let (xr, at) = pro_tab_layout(r, g.size().y, mac);
+        let (xr, at) = if cs2 {
+            let (at, xr) = crate::cs2::doc_tab_layout(r, row, g.size());
+            (xr, at)
+        } else {
+            pro_tab_layout(r, g.size().y, mac)
+        };
         let xresp = ui.interact(xr, ui.scope_id().with(("ptabjobx", job.0)), Sense::click());
         xresp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, tl!("Close")));
-        crate::icons::paint(ui, xr, "x", 10.0, if xresp.hovered() { t.text } else { t.text_faint });
-        ui.painter().galley_with_override_text_color(at, g, if sel { t.text } else { t.text_faint });
+        if cs2 {
+            cs2_tabs.push(crate::cs2::PaletteTab { rect: r, galley: g, active: sel, extra: crate::cs2::DOC_CLOSE_ROOM });
+            cs2_closes.push((xr, sel, xresp.hovered()));
+        } else {
+            crate::icons::paint(ui, xr, "x", 10.0, if xresp.hovered() { t.text } else { t.text_faint });
+            ui.painter().galley_with_override_text_color(at, g, if sel { t.text } else { t.text_faint });
+        }
         if xresp.on_hover_text(tl!("Cancel opening")).clicked() {
             cancel_open = Some(*job);
         } else if resp.clicked() {
             focus_open = Some(*job);
+        }
+    }
+    if cs2 {
+        crate::cs2::paint_palette_tabs(ui.painter(), row, t.chrome, &cs2_tabs);
+        for (xr, sel, hovered) in &cs2_closes {
+            crate::cs2::paint_doc_close(ui.painter(), *xr, *sel, *hovered);
         }
     }
     if !f.overflow.is_empty() {

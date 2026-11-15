@@ -818,6 +818,17 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
     style.accent = t.accent;
     style.right_to_left = crate::direction::is_rtl();
     style.new_dock_zones = true;
+    let cs2 = crate::theme::is_cs2(&t);
+    if cs2 {
+        // CS2 palettes: caption strip over a 16-point tab row, Tahoma-size labels.
+        style.tab_height = crate::cs2::PALETTE_STRIP;
+        style.text = egui::Color32::BLACK;
+        style.inactive_text = crate::cs2::INACTIVE_TEXT;
+        style.font = egui::FontId::proportional(crate::cs2::PALETTE_FONT);
+        style.min_tab_width = crate::cs2::PALETTE_FONT * 2.5 + crate::cs2::PALETTE_TAB_PADDING;
+        // A CS2 palette has one caption, its own strip's; no window title bar above it.
+        style.title_height = 0.0;
+    }
     let style = style.localized(|key| DOCK_LABELS.iter().find(|(k, _)| *k == key).map(|(_, english)| tl!(english).to_string()));
     let mut dock = craft_ui::docking::DockArea::new(area)
         .locked(locked)
@@ -854,7 +865,7 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
                 craft_ui::docking::PanelLimits { min: egui::vec2(220.0, height), ..Default::default() }
             }
         },
-        &mut PanelContent { app, collapsed: &collapsed, fillers: &fillers, card: &card, strip, commands: &mut commands },
+        &mut PanelContent { app, collapsed: &collapsed, fillers: &fillers, card: &card, strip, commands: &mut commands, cs2 },
     );
     if let Some(error) = output.error.take() {
         app.ui.status = error.to_string();
@@ -1527,6 +1538,8 @@ struct PanelContent<'a> {
     /// The tab strip's height, which the native groups' heights include.
     strip: f32,
     commands: &'a mut Vec<(&'static str, Value)>,
+    /// Photoshop CS2 chrome: caption strips, sloped tabs, the round menu button.
+    cs2: bool,
 }
 
 fn panel_menu(app: &mut PhotocraftApp, ui: &mut egui::Ui, panel: &str) {
@@ -1601,12 +1614,40 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
         !self.card.contains(id)
     }
     fn group_header_width(&self, _panels: &[String], _active: &String, _floating: bool, _strip_width: f32) -> f32 {
-        28.0
+        if self.cs2 { crate::cs2::PALETTE_HEADER } else { 28.0 }
+    }
+    fn tab_padding(&self) -> f32 {
+        // 24 is craft-ui's stock TAB_PADDING.
+        if self.cs2 { crate::cs2::PALETTE_TAB_PADDING } else { 24.0 }
+    }
+    fn paints_tab_row(&self) -> bool {
+        self.cs2
+    }
+    fn paint_tab_strip(&mut self, ui: &egui::Ui, strip: egui::Rect, _floating: bool) {
+        let t = crate::theme::Tokens::get(ui.ctx());
+        crate::cs2::paint_palette_strip(ui.painter(), strip, t.card);
+    }
+    fn paint_tabs(&mut self, ui: &egui::Ui, strip: egui::Rect, tabs: &[craft_ui::docking::TabPaint<'_, String>]) {
+        let t = crate::theme::Tokens::get(ui.ctx());
+        let tabs: Vec<_> = tabs.iter().map(|tab| crate::cs2::PaletteTab { rect: tab.rect, galley: tab.galley.clone(), active: tab.active, extra: 0.0 }).collect();
+        crate::cs2::paint_palette_tabs(ui.painter(), strip, t.card, &tabs);
     }
     fn group_header(&mut self, ui: &mut egui::Ui, panels: &[String], active: &String, floating: bool) {
         let collapsed = panels.iter().all(|id| self.collapsed.contains(id));
         let locked = self.app.session.prefs().workspace_locked;
-        let resp = crate::icons::button(ui, "ellipsis", ui.available_height().min(28.0), false, tl!("Panel menu"));
+        let resp = if self.cs2 {
+            let clicks = crate::cs2::palette_header(ui, &tl!("Collapse Panel Group"), &tl!("Close Tab Group"), &tl!("Panel menu"));
+            if !locked && clicks.minimize {
+                self.commands.push(("window.panel.group", json!({"panel":active,"operation":if collapsed {"expand"} else {"collapse"}})));
+            }
+            if !locked && clicks.close {
+                self.commands.push(("window.panel.group", json!({"panel":active,"operation":"close"})));
+            }
+            let Some(resp) = clicks.menu else { return };
+            resp
+        } else {
+            crate::icons::button(ui, "ellipsis", ui.available_height().min(28.0), false, tl!("Panel menu"))
+        };
         egui::Popup::menu(&resp).show(|ui| {
             ui.set_min_width(180.0);
             panel_menu(self.app, ui, active);
