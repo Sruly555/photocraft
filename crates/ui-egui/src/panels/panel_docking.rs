@@ -362,6 +362,42 @@ fn legacy_layout(app: &PhotocraftApp, all: bool) -> Layout<String> {
     Layout { root: Some(with_canvas(Node::Dock { side: Side::End, columns }, width)), floating }
 }
 
+/// The Photoshop CS2 workspace preset's key (Window › Workspace).
+pub(crate) const CS2_WORKSPACE: &str = "Photoshop CS2";
+
+/// Photoshop CS2's default workspace: the canvas fills the work area and CS2's four default
+/// palette groups float down its right edge, top to bottom. Measured from CS2: 212 points wide
+/// with their frames, 2 in from the edge, 1 apart, 132/131/132 tall, Layers taking the rest.
+/// (CS2's Color group also held Styles, which PhotoCraft does not have.)
+pub(crate) fn cs2_layout(area: egui::Rect) -> Layout<String> {
+    let width = 212.0;
+    let x = area.right() - 2.0 - width;
+    let groups: [(&[&str], f32); 4] = [
+        (&["navigator", "info", "histogram"], 132.0),
+        (&["color", "swatches"], 131.0),
+        (&["history", "actions"], 132.0),
+        (&["layers", "channels", "paths"], 0.0),
+    ];
+    let mut y = area.top();
+    let mut floating = Vec::new();
+    for (i, (panels, height)) in groups.iter().enumerate() {
+        let height = if *height > 0.0 { *height } else { (area.bottom() - 3.0 - y).max(160.0) };
+        let panels: Vec<String> = panels.iter().map(|p| (*p).to_owned()).collect();
+        floating.push(Floating::single(panels, 0, [x, y, width, height]).with_id(CS2_WINDOW_BASE + i as u64));
+        y += height + 1.0;
+    }
+    Layout { root: Some(Node::Tabs { panels: vec![CANVAS.to_owned()], active: 0 }), floating }
+}
+
+/// Ids of the CS2 preset's palette windows (stable, so each is the same window every frame).
+const CS2_WINDOW_BASE: u64 = 0xC520_0000;
+
+/// Install the CS2 workspace into `area` (the work area under the bars).
+fn install_cs2(app: &mut PhotocraftApp, area: egui::Rect) {
+    app.ui.docking_generation = app.ui.docking_generation.wrapping_add(1);
+    commit(app, Workspace::new(cs2_layout(area)), Returns::default());
+}
+
 /// Where the Studio themes' Properties card floats: inside the canvas's top right corner.
 fn studio_properties_rect(app: &PhotocraftApp) -> [f32; 4] {
     let (width, height) = (320.0, 440.0);
@@ -791,6 +827,23 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
         let message = "Invalid panel layout; restored the default dock";
         app.ui.status = tl!(message).into();
     }
+    if !dock_only && crate::theme::is_cs2(&crate::theme::Tokens::get(ui.ctx())) {
+        // The CS2 look starts in CS2's own workspace: once per run, the default workspace becomes
+        // the CS2 preset; choosing the preset (or resetting it) lays it out in this work area.
+        let once = area.with("cs2-default-workspace");
+        let first = ui.ctx().data_mut(|d| {
+            let done = d.get_temp::<bool>(once).unwrap_or(false);
+            d.insert_temp(once, true);
+            !done
+        });
+        if first && app.ui.workspace == "Essentials" {
+            app.ui.workspace = CS2_WORKSPACE.to_owned();
+            app.ui.docking = None;
+        }
+        if app.ui.workspace == CS2_WORKSPACE && app.ui.docking.is_none() {
+            install_cs2(app, ui.available_rect_before_wrap());
+        }
+    }
     apply_pending_dock_width(app, ui.ctx());
     native_dock_width(app, ui.ctx());
     let layout = match &app.ui.docking {
@@ -828,6 +881,10 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
         style.min_tab_width = crate::cs2::PALETTE_FONT * 2.5 + crate::cs2::PALETTE_TAB_PADDING;
         // A CS2 palette has one caption, its own strip's; no window title bar above it.
         style.title_height = 0.0;
+        // CS2 (Vista/7) palette windows: a thin dark frame.
+        style.floating_stroke = egui::Stroke::new(1.0, crate::cs2::FRAME);
+        // CS2's palettes drag by their caption; no wide drag bar takes room from the tabs.
+        style.drag_bar_width = 6.0;
     }
     let style = style.localized(|key| DOCK_LABELS.iter().find(|(k, _)| *k == key).map(|(_, english)| tl!(english).to_string()));
     let mut dock = craft_ui::docking::DockArea::new(area)

@@ -900,3 +900,20 @@ fn cs2_footer(app: &mut PhotocraftApp, ui: &mut egui::Ui, ctx: &egui::Context, t
         let _ = crate::menus::invoke(app, ctx, "file.export.saveForWebLegacy", json!({}));
     }
 }
+
+/// CS2's toolbox as a floating palette over the work area: framed, sized to its contents, and
+/// moved by dragging it (it starts at the work area's top left, as CS2's did).
+pub fn floating_toolbox(app: &mut PhotocraftApp, ctx: &egui::Context, work: Rect) {
+    let size = vec2(crate::cs2::TOOLBOX_BODY, crate::cs2::TOOLBOX_HEIGHT);
+    egui::Area::new(egui::Id::new("cs2-toolbox"))
+        .default_pos(work.min + vec2(5.0, 1.0))
+        .order(egui::Order::Middle)
+        .constrain_to(work)
+        .movable(true)
+        .show(ctx, |ui| {
+            let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+            let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect));
+            toolbar(app, &mut inner);
+            ui.painter().rect_stroke(rect.expand(1.0), 0.0, Stroke::new(1.0, crate::cs2::FRAME), StrokeKind::Inside);
+        });
+}

@@ -321,8 +321,16 @@ impl PhotocraftApp {
         // nothing else is docked beside it. A panel already beside the canvas keeps the standard
         // layout so it stays visible and dockable. The layout must not change once a drag starts:
         // craft-ui records the areas on the press, and swapping the shape cancels the drag.
-        let dock_edge_layout = toolbar_shown && docking && toolbar_at_dock_edge && crate::panel_docking::canvas_alone(self);
-        if dock_edge_layout {
+        // CS2: the toolbox and palettes float over the work area, as CS2's did.
+        let cs2 = crate::theme::is_cs2(&theme::Tokens::get(&ctx));
+        let dock_edge_layout = !cs2 && toolbar_shown && docking && toolbar_at_dock_edge && crate::panel_docking::canvas_alone(self);
+        if cs2 && docking {
+            let work = ui.available_rect_before_wrap();
+            panels::dock_area(self, ui);
+            if toolbar_shown {
+                panels::toolbar::floating_toolbox(self, &ctx, work);
+            }
+        } else if dock_edge_layout {
             // Dock outermost, then its rail, then the toolbox, then the canvas: the toolbox sits
             // between the canvas and the dock, not outside the dock at the window edge.
             panels::dock_panel(self, ui);

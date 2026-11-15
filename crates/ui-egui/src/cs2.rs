@@ -397,3 +397,9 @@ pub fn grip(ui: &mut Ui, height: f32) {
 pub fn pixel(mesh: &mut egui::Mesh, at: egui::Pos2, color: Color32) {
     mesh.add_colored_rect(Rect::from_min_size(at, vec2(1.0, 1.0)), color);
 }
+
+/// A floating palette's frame (the toolbox's and the palette windows').
+pub const FRAME: Color32 = Color32::from_rgb(122, 122, 122);
+/// The floating toolbox's height: caption and header, CS2's four tool sections (measured 71, 93,
+/// 49 and 49 points) and its footer.
+pub const TOOLBOX_HEIGHT: f32 = CAPTION_HEIGHT + 23.0 + 71.0 + 93.0 + 49.0 + 49.0 + 2.0 + 53.0 + 2.0 + 27.0 + 2.0 + 22.0 + 2.0 + 25.0 + 4.0;

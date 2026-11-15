@@ -630,8 +630,17 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
     // Every tab's natural width, whether or not it stays on the strip.
     let natural: Vec<f32> = titles.iter().map(|title| ui.painter().layout_no_wrap(title.clone(), font.clone(), t.text).size().x + pad).collect();
     let selected = app.jobs.focus.and_then(|job| opening.iter().position(|(open, _, _)| *open == job)).map_or_else(|| active.unwrap_or(0), |p| tab_count + p);
-    let f = fit_doc_tabs(&natural, selected, strip.width());
-    let mut x = strip.left();
+    // CS2: tabs start right of the floating toolbox where it covers the strip's start.
+    let tabs_left = if cs2 {
+        ui.ctx()
+            .memory(|m| m.area_rect(egui::Id::new("cs2-toolbox")))
+            .filter(|tb| tb.intersects(strip) && tb.left() <= strip.left() + 8.0)
+            .map_or(strip.left(), |tb| (tb.right() + 3.0).min(strip.right()))
+    } else {
+        strip.left()
+    };
+    let f = fit_doc_tabs(&natural, selected, strip.right() - tabs_left);
+    let mut x = tabs_left;
     let mut placed: Vec<(usize, Rect)> = Vec::with_capacity(f.shown.len());
     for &(i, w) in &f.shown {
         let r = Rect::from_min_size(egui::pos2(x, strip.top()), egui::vec2(w, strip.height()));

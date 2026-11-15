@@ -75,6 +75,7 @@ pub fn switcher_options(app: &PhotocraftApp) -> Vec<(String, String)> {
         ("Graphic and Web", tl!("Graphic and Web")),
         ("Pixel Art", tl!("Pixel Art")),
         ("Motion", tl!("Motion")),
+        (crate::panel_docking::CS2_WORKSPACE, tl!("Photoshop CS2")),
     ];
     let mut opts: Vec<(String, String)> = presets.iter().map(|(k, l)| ((*k).to_string(), (*l).to_string())).collect();
     opts.extend(saved_names(app).into_iter().map(|n| (n.clone(), n)));
