@@ -741,7 +741,7 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
         }
     }
     if cs2 {
-        crate::cs2::paint_palette_tabs(ui.painter(), row, t.chrome, &cs2_tabs);
+        crate::cs2::paint_palette_tabs(ui.painter(), row, t.chrome, &cs2_tabs, false);
         for (xr, sel, hovered) in &cs2_closes {
             crate::cs2::paint_doc_close(ui.painter(), *xr, *sel, *hovered);
         }

@@ -140,7 +140,8 @@ pub const PALETTE_TAB_PADDING: f32 = 14.5;
 pub const PALETTE_FONT: f32 = 11.4;
 const TAB_MARGIN: f32 = 4.0;
 const TAB_INSET: f32 = 6.0;
-const SLOPE_GAP: f32 = 5.0;
+/// The slope starts 4 points after the label's ink: 1.5 after its laid-out width (measured).
+const SLOPE_GAP: f32 = 1.5;
 const SLOPE_WIDTH: f32 = 17.0;
 /// Width of the group header at the strip's right: caption buttons over the round menu button.
 pub const PALETTE_HEADER: f32 = 34.0;
@@ -156,6 +157,9 @@ const INACTIVE_TOP: Color32 = Color32::from_rgb(208, 208, 208);
 const INACTIVE_BOTTOM: Color32 = Color32::from_rgb(169, 169, 169);
 const TAB_OUTLINE: Color32 = Color32::from_rgb(122, 122, 122);
 pub const INACTIVE_TEXT: Color32 = Color32::from_rgb(72, 72, 72);
+/// A following tab's left edge: dark line, then a lighter one (measured).
+const EDGE_DARK: Color32 = Color32::from_rgb(95, 95, 95);
+const EDGE_LIGHT: Color32 = Color32::from_rgb(165, 165, 165);
 
 fn tab_row(strip: Rect) -> Rect {
     Rect::from_min_max(pos2(strip.left(), strip.bottom() - PALETTE_TAB_ROW), strip.max)
@@ -233,20 +237,36 @@ pub struct PaletteTab {
 
 /// CS2's tabs: inactive ones right to left (each slope over its right neighbour), the active one
 /// last, on top. Shapes overlap neighbours; only the painting does, hit areas stay the stock ones.
-pub fn paint_palette_tabs(painter: &egui::Painter, strip: Rect, body: Color32, tabs: &[PaletteTab]) {
+/// `edge_all`: every tab has its dark left edge (the palette well's tabs), not only those after
+/// the first.
+pub fn paint_palette_tabs(painter: &egui::Painter, strip: Rect, body: Color32, tabs: &[PaletteTab], edge_all: bool) {
     let row = tab_row(strip);
     let painter = painter.with_clip_rect(row.intersect(painter.clip_rect()));
+    // The slope starts 5 points after the label, or at the tab's own right edge when the row is
+    // squeezed (the next tab's edge then cuts the label, as in CS2's palette well).
     let shape = |tab: &PaletteTab| {
         let left = tab.rect.left() + TAB_MARGIN;
         let text_end = left + TAB_INSET + tab.galley.size().x + tab.extra;
-        (left, text_end + SLOPE_GAP)
+        (left, (text_end + SLOPE_GAP).min(tab.rect.right() + 0.5))
     };
+    let first = tabs.first().map(|t| t.rect.left());
     let text_at = |tab: &PaletteTab, left: f32| pos2(left + TAB_INSET, row.top() + 2.0 + (PALETTE_TAB_ROW - 2.0 - tab.galley.size().y) / 2.0);
-    for tab in tabs.iter().rev().filter(|t| !t.active) {
+    // Palettes: right to left, each slope over its right neighbour. The palette well (`edge_all`):
+    // left to right, each tab's edge cutting the label before it (measured, both).
+    let order: Vec<&PaletteTab> = if edge_all { tabs.iter().collect() } else { tabs.iter().rev().collect() };
+    for tab in order.into_iter().filter(|t| !t.active) {
         let (left, s) = shape(tab);
         let (top, bottom) = (row.top() + 2.0, row.bottom() - 1.0);
-        let pts = tab_outline(left, s, top, bottom);
+        // A tab after the first starts at a dark edge 6 points before its label; the tab to its
+        // left (painted later, on top) covers that edge's lower part with its slope (measured).
+        let after_first = edge_all || first.is_some_and(|f| tab.rect.left() > f + 0.5);
+        let edge = left;
+        let pts = tab_outline(edge, s.max(edge + 1.0), top, bottom);
         fill_vertical(&painter, &pts, top, bottom, INACTIVE_TOP, INACTIVE_BOTTOM);
+        if after_first {
+            painter.line_segment([pos2(edge + 0.5, top), pos2(edge + 0.5, bottom)], Stroke::new(1.0, EDGE_DARK));
+            painter.line_segment([pos2(edge + 1.5, top), pos2(edge + 1.5, bottom)], Stroke::new(1.0, EDGE_LIGHT));
+        }
         let slope: Vec<_> = pts[2..].to_vec();
         painter.add(egui::Shape::line(slope, Stroke::new(1.0, TAB_OUTLINE)));
         painter.line_segment([pos2(left, row.bottom() - 0.5), pos2(slope_x(s, 1.0) + 1.0, row.bottom() - 0.5)], Stroke::new(1.0, Color32::WHITE));
@@ -403,3 +423,86 @@ pub const FRAME: Color32 = Color32::from_rgb(122, 122, 122);
 /// The floating toolbox's height: caption and header, CS2's four tool sections (measured 71, 93,
 /// 49 and 49 points) and its footer.
 pub const TOOLBOX_HEIGHT: f32 = CAPTION_HEIGHT + 23.0 + 71.0 + 93.0 + 49.0 + 49.0 + 2.0 + 53.0 + 2.0 + 27.0 + 2.0 + 22.0 + 2.0 + 25.0 + 4.0;
+
+// -------------------------------------------------------------------------------- palette well
+
+/// The palette well at the options bar's right end (measured): 166 x 23 points, sunken, grey,
+/// with palette tabs standing on its bottom edge.
+pub const WELL_SIZE: egui::Vec2 = egui::Vec2::new(166.0, 23.0);
+const WELL_GREY: Color32 = Color32::from_rgb(178, 178, 178);
+/// The options-bar room for the separator, the Go to Bridge button, a separator and the well.
+pub const WELL_AREA: f32 = 9.0 + 26.0 + 9.0 + WELL_SIZE.x + 6.0;
+
+/// A small folder under a magnifier: CS2's "Go to Bridge" button position, drawn original.
+fn browse_glyph(p: &egui::Painter, c: egui::Pos2) {
+    let body = Rect::from_center_size(c + vec2(-2.0, 2.0), vec2(14.0, 10.0));
+    let tab = Rect::from_min_size(body.min + vec2(0.0, -2.0), vec2(6.0, 3.0));
+    p.rect_filled(tab, 0.0, Color32::from_gray(150));
+    p.rect_filled(body, 1.0, Color32::from_gray(230));
+    p.rect_stroke(body, 1.0, Stroke::new(1.0, Color32::from_gray(80)), StrokeKind::Inside);
+    let lens = c + vec2(4.0, -3.0);
+    p.circle_filled(lens, 3.5, Color32::WHITE);
+    p.circle_stroke(lens, 3.5, Stroke::new(1.2, Color32::from_gray(40)));
+    p.line_segment([lens + vec2(2.5, 2.5), lens + vec2(5.5, 5.5)], Stroke::new(2.0, Color32::from_gray(40)));
+}
+
+/// Draws the well's group into `ui` (right-aligned room of [`WELL_AREA`]); returns the tab
+/// clicked, if any, and whether the browse button was.
+pub fn palette_well(ui: &mut Ui, labels: &[&str], browse_tip: &str) -> (Option<usize>, bool) {
+    let area = ui.max_rect();
+    let p = ui.painter().clone();
+    let cy = area.center().y;
+    let mut x = area.left();
+    let sep = |x: f32| etched_vline(&p, Rect::from_min_max(pos2(x, cy - 11.0), pos2(x + 9.0, cy + 11.0)));
+    sep(x);
+    x += 9.0;
+    let browse = Rect::from_min_size(pos2(x, cy - 12.0), vec2(26.0, 24.0));
+    let b = ui.interact(browse, ui.scope_id().with("cs2-browse"), Sense::click()).on_hover_text(browse_tip);
+    if b.hovered() {
+        paint_raised(&p, browse);
+    }
+    browse_glyph(&p, browse.center());
+    x += 26.0;
+    sep(x);
+    x += 9.0;
+    // The sunken well: shadow top and left, highlight bottom and right.
+    let well = Rect::from_min_size(pos2(x, (cy - WELL_SIZE.y / 2.0).round()), WELL_SIZE);
+    p.rect_filled(well, 0.0, WELL_GREY);
+    p.line_segment([well.left_top() + vec2(0.5, 0.5), well.right_top() + vec2(-0.5, 0.5)], Stroke::new(1.0, SHADOW));
+    p.line_segment([well.left_top() + vec2(0.5, 0.5), well.left_bottom() + vec2(0.5, -0.5)], Stroke::new(1.0, SHADOW));
+    p.line_segment([well.right_top() + vec2(-0.5, 0.5), well.right_bottom() + vec2(-0.5, -0.5)], Stroke::new(1.0, HIGHLIGHT));
+    // Tabs on the well's floor: the widest fit first; earlier tabs give up room when it is short
+    // (CS2 cut their labels without an ellipsis).
+    let row = Rect::from_min_max(pos2(well.left() - 1.0, well.bottom() - PALETTE_TAB_ROW), pos2(well.right() - 1.0, well.bottom()));
+    let font = egui::FontId::proportional(PALETTE_FONT);
+    let natural: Vec<f32> = labels.iter().map(|l| p.layout_no_wrap((*l).to_owned(), font.clone(), INACTIVE_TEXT).size().x + PALETTE_TAB_PADDING).collect();
+    let room = row.width() - 18.0;
+    let total: f32 = natural.iter().sum();
+    let widths: Vec<f32> = if total <= room || natural.len() < 2 {
+        natural.clone()
+    } else {
+        // CS2 keeps the last tab whole and gives the others an equal share.
+        let last = natural.last().copied().unwrap_or(0.0);
+        let share = ((room - last) / (natural.len() - 1) as f32).max(PALETTE_TAB_PADDING + 4.0);
+        natural.iter().enumerate().map(|(i, w)| if i + 1 == natural.len() { *w } else { w.min(share) }).collect()
+    };
+    let mut tabs = Vec::new();
+    let mut clicked = None;
+    let mut tx = row.left();
+    for (i, (label, w)) in labels.iter().zip(&widths).enumerate() {
+        let rect = Rect::from_min_size(pos2(tx, row.top()), vec2(*w, row.height()));
+        let mut job = egui::text::LayoutJob::simple_singleline((*label).to_owned(), font.clone(), INACTIVE_TEXT);
+        // A cut label runs up to the next tab's edge (CS2 clips it there, without an ellipsis).
+        job.wrap = egui::text::TextWrapping { max_width: (w - TAB_INSET).max(4.0), max_rows: 1, break_anywhere: true, overflow_character: None };
+        let galley = ui.fonts_mut(|f| f.layout_job(job));
+        if ui.interact(rect, ui.scope_id().with(("cs2-well", i)), Sense::click()).on_hover_text(*label).clicked() {
+            clicked = Some(i);
+        }
+        tabs.push(PaletteTab { rect, galley, active: false, extra: 0.0 });
+        tx += w;
+    }
+    paint_palette_tabs(&p, row, WELL_GREY, &tabs, true);
+    // The well's bottom highlight, over the tab baselines.
+    p.line_segment([well.left_bottom() + vec2(0.0, -0.5), well.right_bottom() + vec2(0.0, -0.5)], Stroke::new(1.0, HIGHLIGHT));
+    (clicked, b.clicked())
+}

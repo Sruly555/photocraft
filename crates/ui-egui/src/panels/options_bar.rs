@@ -82,6 +82,26 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         .exact_size(if crate::theme::is_cs2(&t) { crate::cs2::OPTIONS_BAR } else { options_bar_height(t.pro, narrow) })
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(10, 0)))
         .show(ui, |ui| {
+            if crate::theme::is_cs2(&t) {
+                // CS2's palette well at the bar's right end: Brushes, Tool Presets, Layer Comps.
+                egui::Panel::right("cs2-palette-well").resizable(false).exact_size(crate::cs2::WELL_AREA).frame(egui::Frame::NONE).show(ui, |ui| {
+                    let labels = [tl!("Brushes"), tl!("Tool Presets"), tl!("Layer Comps")];
+                    let labels: Vec<&str> = labels.iter().map(|l| l.as_ref()).collect();
+                    let (tab, browse) = crate::cs2::palette_well(ui, &labels, &tl!("Open"));
+                    let command = match tab {
+                        Some(0) => Some(("window.toggle.brushes", json!({}))),
+                        Some(1) => Some(("window.panel.toolPresets", json!({}))),
+                        Some(2) => Some(("window.panel.activate", json!({"panel": "layerComps"}))),
+                        _ => None,
+                    };
+                    let command = if browse { Some(("file.open", json!({}))) } else { command };
+                    if let Some((id, params)) = command
+                        && let Err(e) = crate::menus::invoke(app, ui.ctx(), id, params)
+                    {
+                        app.ui.status = e;
+                    }
+                });
+            }
             ui.style_mut().spacing.scroll = egui::style::ScrollStyle { bar_width: 4.0, ..egui::style::ScrollStyle::floating() };
             egui::ScrollArea::horizontal().id_salt("tool-options").auto_shrink([false, false]).show(ui, |ui| {
                 // Font ink can extend beyond its advance width at fractional positions.

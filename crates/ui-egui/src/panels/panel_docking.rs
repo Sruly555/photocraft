@@ -1687,7 +1687,7 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
     fn paint_tabs(&mut self, ui: &egui::Ui, strip: egui::Rect, tabs: &[craft_ui::docking::TabPaint<'_, String>]) {
         let t = crate::theme::Tokens::get(ui.ctx());
         let tabs: Vec<_> = tabs.iter().map(|tab| crate::cs2::PaletteTab { rect: tab.rect, galley: tab.galley.clone(), active: tab.active, extra: 0.0 }).collect();
-        crate::cs2::paint_palette_tabs(ui.painter(), strip, t.card, &tabs);
+        crate::cs2::paint_palette_tabs(ui.painter(), strip, t.card, &tabs, false);
     }
     fn group_header(&mut self, ui: &mut egui::Ui, panels: &[String], active: &String, floating: bool) {
         let collapsed = panels.iter().all(|id| self.collapsed.contains(id));
