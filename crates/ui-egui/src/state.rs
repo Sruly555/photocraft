@@ -528,6 +528,10 @@ pub struct UiState {
     /// Panels belonging to explicitly collapsed custom tab groups.
     #[serde(default)]
     pub docking_collapsed: Vec<String>,
+    /// Where the CS2 theme's floating toolbox was left (its top left, in points), kept with the
+    /// panel layout so it comes back there at the next launch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cs2_toolbox: Option<[f32; 2]>,
     /// One-frame focus/raise request from an explicit panel reveal.
     #[serde(skip)]
     pub docking_reveal: Option<String>,
@@ -705,6 +709,7 @@ impl Default for UiState {
             docking_kept: None,
             docking_generation: 0,
             docking_collapsed: Vec::new(),
+            cs2_toolbox: None,
             docking_reveal: None,
             color_panel: Default::default(),
             color_panel_synced: None,

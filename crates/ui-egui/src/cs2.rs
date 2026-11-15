@@ -706,6 +706,63 @@ mod tests {
         assert_eq!(right_of_palettes(std::iter::empty(), area), 1456.0);
     }
 
+    /// The toolbox alone over a 1000 x 700 work area, in the CS2 theme.
+    fn toolbox(app: crate::PhotocraftApp) -> egui_kittest::Harness<'static, crate::PhotocraftApp> {
+        let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1000.0, 700.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+            |ui, app: &mut crate::PhotocraftApp| {
+                if ui.ctx().fonts(|f| f.families().contains(&egui::FontFamily::Name("medium".into()))) {
+                    let work = ui.max_rect();
+                    crate::panels::toolbar::floating_toolbox(app, ui.ctx(), work);
+                }
+            },
+            app,
+        );
+        crate::PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Classic);
+        h.run_steps(3);
+        h
+    }
+
+    fn toolbox_rect(h: &egui_kittest::Harness<'static, crate::PhotocraftApp>) -> Rect {
+        h.ctx.memory(|m| m.area_rect(egui::Id::unique("cs2-toolbox"))).expect("the toolbox is shown")
+    }
+
+    #[test]
+    fn the_toolbox_starts_beside_the_ruler_and_comes_back_where_it_was_left() {
+        let new_app = || crate::PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+        // First launch: just right of the vertical ruler, which it must not cover.
+        let mut h = toolbox(new_app());
+        let first = toolbox_rect(&h);
+        assert!(first.left() >= crate::canvas::rulers::RULER, "{first:?} covers the ruler");
+        assert_eq!(h.state().ui.cs2_toolbox, None, "the default place is not saved as a choice");
+        // Dragged by its title strip.
+        let grab = first.left_top() + egui::vec2(20.0, 4.0);
+        h.event(egui::Event::PointerMoved(grab));
+        h.step();
+        h.event(egui::Event::PointerButton { pos: grab, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
+        h.step();
+        for i in 1..=10 {
+            h.event(egui::Event::PointerMoved(grab + egui::vec2(40.0, 25.0) * i as f32));
+            h.step();
+        }
+        h.event(egui::Event::PointerButton {
+            pos: grab + egui::vec2(400.0, 250.0),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.run_steps(3);
+        let moved = toolbox_rect(&h);
+        // It follows the pointer (to within egui's drag threshold).
+        assert!((moved.min - (first.min + egui::vec2(400.0, 250.0))).length() < 12.0, "{first:?} -> {moved:?}");
+        assert_eq!(h.state().ui.cs2_toolbox, Some([moved.min.x, moved.min.y]));
+        // Saved with the panel layout, and restored from it by the next launch.
+        let saved = crate::dock::snapshot(h.state());
+        let mut next = new_app();
+        crate::dock::apply(&mut next, &saved);
+        let h = toolbox(next);
+        assert!((toolbox_rect(&h).min - moved.min).length() < 1.0, "{:?} vs {moved:?}", toolbox_rect(&h));
+    }
+
     #[test]
     fn every_cs2_key_names_a_real_command() {
         for (id, _) in SHORTCUTS {

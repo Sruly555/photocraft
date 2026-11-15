@@ -340,6 +340,9 @@ pub(crate) fn close_tab(app: &mut PhotocraftApp, g: Group, tab: usize, pro: bool
 /// What `prefs.panelLayout` holds: the live layout and open panels.
 pub(crate) fn snapshot(app: &PhotocraftApp) -> Value {
     let mut layout = json!({"workspace": app.ui.workspace, "panels": app.ui.panels, "dockTabs": app.ui.dock_tabs, "dock": app.ui.dock, "timelineOpen": app.ui.timeline.open, "docking": app.ui.docking, "dockingReturns": app.ui.docking_returns, "dockingCollapsed": app.ui.docking_collapsed});
+    if let (Some(pos), Some(layout)) = (app.ui.cs2_toolbox, layout.as_object_mut()) {
+        layout.insert("cs2Toolbox".into(), json!(pos));
+    }
     keep_newer(app, &mut layout);
     layout
 }
@@ -523,6 +526,10 @@ pub fn apply(app: &mut PhotocraftApp, v: &Value) {
     }
     if let Some(t) = v.get("dockTabs").and_then(|t| serde_json::from_value(t.clone()).ok()) {
         app.ui.dock_tabs = t;
+    }
+    // The CS2 toolbox's place; a finite pair only, so a hand-edited file can't lose it.
+    if let Some(pos) = v.get("cs2Toolbox").and_then(|p| serde_json::from_value::<[f32; 2]>(p.clone()).ok()).filter(|p| p.iter().all(|c| c.is_finite())) {
+        app.ui.cs2_toolbox = Some(pos);
     }
     if let Some(d) = v.get("dock").and_then(|d| serde_json::from_value(d.clone()).ok()) {
         app.ui.dock = d;

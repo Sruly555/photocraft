@@ -920,15 +920,25 @@ fn cs2_footer(app: &mut PhotocraftApp, ui: &mut egui::Ui, ctx: &egui::Context, t
 /// shows when rulers are on, as in CS2.
 pub fn floating_toolbox(app: &mut PhotocraftApp, ctx: &egui::Context, work: Rect) {
     let size = vec2(crate::cs2::TOOLBOX_BODY, crate::cs2::TOOLBOX_HEIGHT);
-    egui::Area::new(egui::Id::unique("cs2-toolbox"))
-        .default_pos(work.min + vec2(crate::canvas::rulers::RULER + 4.0, 1.0))
-        .order(egui::Order::Middle)
-        .constrain_to(work)
-        .movable(true)
-        .show(ctx, |ui| {
+    // Where it was left last time (saved with the panel layout), else just right of the ruler.
+    // The app owns the place: the area is put there every frame and a drag moves the place,
+    // so egui's first-frame sizing pass can't shift it.
+    let start = work.min + vec2(crate::canvas::rulers::RULER + 4.0, 1.0);
+    let place = app.ui.cs2_toolbox.map_or(start, |[x, y]| egui::pos2(x, y));
+    let shown =
+        egui::Area::new(egui::Id::unique("cs2-toolbox")).current_pos(place).order(egui::Order::Middle).constrain_to(work).movable(true).show(ctx, |ui| {
             let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
             let mut inner = ui.new_child(egui::UiBuilder::new().max_rect(rect));
             toolbar(app, &mut inner);
             ui.painter().rect_stroke(rect.expand(1.0), 0.0, Stroke::new(1.0, crate::cs2::FRAME), StrokeKind::Inside);
         });
+    // A drag moves the place; the default place is not saved until the toolbox has been moved.
+    let delta = shown.response.drag_delta();
+    if delta != egui::Vec2::ZERO {
+        // Kept inside the work area, as the area itself is.
+        let r = shown.response.rect;
+        let max = (work.max - r.size()).max(work.min);
+        let to = (place + delta).clamp(work.min, max);
+        app.ui.cs2_toolbox = Some([to.x, to.y]);
+    }
 }
