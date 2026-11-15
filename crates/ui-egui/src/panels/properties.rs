@@ -265,6 +265,10 @@ pub(super) fn adjustments_grid(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
 /// The options bar's Select and Mask… button: greyed out, as the menu item is, until there is a
 /// selection (or a layer mask) to refine (#7520).
 pub(super) fn select_and_mask_button(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
+    // CS2 had no Select and Mask; the command stays in the Select menu.
+    if crate::theme::is_cs2(&crate::theme::Tokens::get(ui.ctx())) {
+        return;
+    }
     let enabled = crate::menus::is_enabled(app, "select.selectAndMask");
     let clicked = ui.add_enabled_ui(enabled, |ui| widgets::secondary_button(ui, tl!("Select and Mask…"), 0.0).clicked()).inner;
     if clicked {

@@ -135,8 +135,9 @@ pub const PALETTE_STRIP: f32 = PALETTE_CAPTION + PALETTE_TAB_ROW;
 /// it, so the next label's ink starts 17 points after this one's (measured; a galley is ~2.5
 /// points wider than its ink at this size).
 pub const PALETTE_TAB_PADDING: f32 = 14.5;
-/// Tab label size: Tahoma 8 pt in CS2; PhotoCraft's UI face matches its widths at 9.5.
-pub const PALETTE_FONT: f32 = 9.5;
+/// Tab label size: Tahoma 8 pt in CS2; PhotoCraft's UI face matches its widths at 9.5 points
+/// on screen, which is 11.4 before the Tiny UI scale CS2 runs at.
+pub const PALETTE_FONT: f32 = 11.4;
 const TAB_MARGIN: f32 = 4.0;
 const TAB_INSET: f32 = 6.0;
 const SLOPE_GAP: f32 = 5.0;
@@ -363,4 +364,36 @@ pub fn paint_doc_close(painter: &egui::Painter, r: Rect, active: bool, hovered: 
     let s = Stroke::new(1.2, ink);
     painter.line_segment([c + vec2(-2.5, -2.5), c + vec2(2.5, 2.5)], s);
     painter.line_segment([c + vec2(2.5, -2.5), c + vec2(-2.5, 2.5)], s);
+}
+
+// --------------------------------------------------------------------------- bars and separators
+
+/// Options bar height (measured: 31 points under a 19-point menu bar and its etched line).
+pub const OPTIONS_BAR: f32 = 31.0;
+
+/// A vertical etched separator (shadow over highlight) centred in `r`.
+pub fn etched_vline(painter: &egui::Painter, r: Rect) {
+    let x = r.center().x.floor();
+    painter.line_segment([pos2(x + 0.5, r.top()), pos2(x + 0.5, r.bottom())], Stroke::new(1.0, SHADOW));
+    painter.line_segment([pos2(x + 1.5, r.top()), pos2(x + 1.5, r.bottom())], Stroke::new(1.0, HIGHLIGHT));
+}
+
+/// The dotted drag grip at a bar's start: a column of 1-point dots, shadow with a highlight
+/// below-right. Built as a raw mesh: egui's anti-aliasing drops 1-point rects and lines.
+pub fn grip(ui: &mut Ui, height: f32) {
+    let (r, _) = ui.allocate_exact_size(vec2(8.0, height), Sense::hover());
+    let x = r.left().round() + 2.0;
+    let mut y = r.top().round() + 1.0;
+    let mut mesh = egui::Mesh::default();
+    while y + 2.0 <= r.bottom() {
+        pixel(&mut mesh, pos2(x + 1.0, y + 1.0), HIGHLIGHT);
+        pixel(&mut mesh, pos2(x, y), SHADOW);
+        y += 2.0;
+    }
+    ui.painter().add(mesh);
+}
+
+/// One crisp pixel-sized quad at `at` (top-left) in a mesh.
+pub fn pixel(mesh: &mut egui::Mesh, at: egui::Pos2, color: Color32) {
+    mesh.add_colored_rect(Rect::from_min_size(at, vec2(1.0, 1.0)), color);
 }

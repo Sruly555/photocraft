@@ -147,6 +147,10 @@ pub fn hairline(ui: &mut Ui) {
 pub fn vline(ui: &mut Ui, height: f32) {
     let t = Tokens::get(ui.ctx());
     let (r, _) = ui.allocate_exact_size(vec2(9.0, height), Sense::hover());
+    if crate::theme::is_cs2(&t) {
+        crate::cs2::etched_vline(ui.painter(), r);
+        return;
+    }
     ui.painter().line_segment([r.center_top(), r.center_bottom()], Stroke::new(1.0, t.separator));
 }
 

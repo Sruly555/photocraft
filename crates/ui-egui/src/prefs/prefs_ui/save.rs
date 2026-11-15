@@ -11,7 +11,13 @@ pub fn tick(app: &mut PhotocraftApp, ctx: &egui::Context) {
     sync_rulers(app);
     sync_display_scale(app, ctx);
     sync_appearance(app, ctx);
-    crate::theme::set_ui_font_size(ctx, app.session.prefs().interface.ui_font_size);
+    // CS2 drew everything in Tahoma 8 pt; PhotoCraft's face matches its widths at the Tiny scale.
+    let font_size = if crate::theme::is_cs2(&crate::theme::Tokens::get(ctx)) {
+        photocraft_engine::prefs::UiFontSize::Tiny
+    } else {
+        app.session.prefs().interface.ui_font_size
+    };
+    crate::theme::set_ui_font_size(ctx, font_size);
     presets_store(app);
     sync_tooltips(app, ctx);
     app.sync_recent();

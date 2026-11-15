@@ -85,7 +85,11 @@ pub fn title_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     egui::Rect::from_min_max(egui::pos2((menus_end + TITLE_GAP).min(right_edge), full.top()), egui::pos2(right_edge, full.bottom()))
                 };
                 let mut group_ui = ui.new_child(egui::UiBuilder::new().max_rect(group).layout(crate::direction::trailing()));
-                let controls_end = {
+                // CS2's menu row holds only the menus: the workspace switcher, search and theme
+                // toggle stay reachable from Window, Edit and Preferences.
+                let controls_end = if crate::theme::is_cs2(&t) {
+                    if rtl { group.left() } else { group.right() }
+                } else {
                     let ui = &mut group_ui;
                     ui.spacing_mut().item_spacing.x = 6.0;
                     let mut ws = app.ui.workspace.clone();

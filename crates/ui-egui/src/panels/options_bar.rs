@@ -79,7 +79,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let narrow = app.session.prefs().workspace.narrow_options_bar();
     egui::Panel::top("options_bar")
-        .exact_size(options_bar_height(t.pro, narrow))
+        .exact_size(if crate::theme::is_cs2(&t) { crate::cs2::OPTIONS_BAR } else { options_bar_height(t.pro, narrow) })
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(10, 0)))
         .show(ui, |ui| {
             ui.style_mut().spacing.scroll = egui::style::ScrollStyle { bar_width: 4.0, ..egui::style::ScrollStyle::floating() };
@@ -88,7 +88,10 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 // Include its gutter in the container layout, including right-aligned actions.
                 egui::Frame::NONE.inner_margin(egui::Margin { right: 2, ..Default::default() }).show(ui, |ui| {
                     crate::direction::horizontal_centered(ui, |ui| {
-                        if t.pro {
+                        if crate::theme::is_cs2(&t) {
+                            // CS2: the options bar's drag grip; Home is not part of CS2.
+                            crate::cs2::grip(ui, 20.0);
+                        } else if t.pro {
                             crate::chrome_ui::home_button(app, ui);
                             widgets::vline(ui, 22.0);
                         }
