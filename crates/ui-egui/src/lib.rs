@@ -27,6 +27,7 @@ macro_rules! tl {
 mod brush_mode_menu;
 pub mod canvas;
 pub mod control;
+pub mod cs2;
 pub mod dialogs;
 pub mod dock;
 pub(crate) mod edit_session;

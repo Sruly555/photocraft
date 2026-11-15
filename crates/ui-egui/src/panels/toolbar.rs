@@ -75,10 +75,15 @@ pub(crate) fn toolbar_position(tool: Tool) -> usize {
 /// dropped, and so is a section with no slots. Each slot carries its index in `TOOL_SECTIONS`,
 /// so its flyout stays put when other slots are hidden.
 pub(super) fn visible_sections(hidden: &[String]) -> Vec<Vec<(usize, Vec<Tool>)>> {
+    visible_sections_of(TOOL_SECTIONS, hidden)
+}
+
+/// `visible_sections` over any section table (the CS2 toolbox has its own).
+pub(super) fn visible_sections_of(table: &[&[&[Tool]]], hidden: &[String]) -> Vec<Vec<(usize, Vec<Tool>)>> {
     let hidden: Vec<Tool> = hidden.iter().map(String::as_str).filter_map(Tool::from_name).collect();
     let mut index = 0usize;
     let mut sections = Vec::new();
-    for section in TOOL_SECTIONS {
+    for section in table {
         let mut slots = Vec::new();
         for slot in section.iter() {
             let tools: Vec<Tool> = slot.iter().copied().filter(|tool| !hidden.contains(tool)).collect();
@@ -166,19 +171,40 @@ fn more_slot_flyout(app: &mut PhotocraftApp, ui: &mut egui::Ui, button: &egui::R
 /// toggle and Move Toolbar header buttons.
 pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
+    let cs2 = crate::theme::is_cs2(&t);
     let (_, bx) = toolbar_columns(t.pro);
+    let bx = if cs2 { crate::cs2::TOOL_CELL.x } else { bx };
     let m = if t.pro { 5i8 } else { 7i8 };
-    let sections = visible_sections(&app.session.prefs().toolbar.hidden);
+    let sections = if cs2 {
+        visible_sections_of(crate::cs2::TOOL_SECTIONS, &app.session.prefs().toolbar.hidden)
+    } else {
+        visible_sections(&app.session.prefs().toolbar.hidden)
+    };
     // Two columns when the header chevron asks for them; a column that doesn't fit scrolls.
-    let double = app.ui.panels.toolbar_double;
-    let w = toolbar_width(t.pro, double);
+    let double = app.ui.panels.toolbar_double || cs2;
+    let w = if cs2 { crate::cs2::TOOLBOX_BODY } else { toolbar_width(t.pro, double) };
     let side = app.ui.panels.toolbar_side.resolve();
     let panel = if side == ToolbarSide::Right { egui::Panel::right("toolbar") } else { egui::Panel::left("toolbar") };
-    panel.resizable(false).exact_size(w).frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(m, 8))).show(ui, |ui| {
+    panel.resizable(false).exact_size(w).frame(egui::Frame::NONE.fill(t.chrome).inner_margin(if cs2 {
+        egui::Margin { left: crate::cs2::TOOLBOX_INSET as i8, right: crate::cs2::TOOLBOX_INSET as i8, top: 0, bottom: 4 }
+    } else {
+        egui::Margin::symmetric(m, 8)
+    })).show(ui, |ui| {
         // Toolbar width is a user preference, not a Pro-only feature. The two header buttons share
         // the narrow toolbar column (14-point targets in every theme, including RTL layouts), so
         // their tooltips carry the full names.
-        ui.allocate_ui_with_layout(vec2(bx, 14.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
+        if cs2 {
+            // CS2: palette caption strip, then the header box (Adobe's feather art is not reproduced).
+            let top = ui.max_rect();
+            let full = Rect::from_min_max(pos2(top.left() - crate::cs2::TOOLBOX_INSET, top.top()), pos2(top.right() + crate::cs2::TOOLBOX_INSET, top.top() + crate::cs2::CAPTION_HEIGHT));
+            crate::cs2::caption_strip(ui.painter(), full);
+            ui.add_space(crate::cs2::CAPTION_HEIGHT + 23.0);
+            let (r, _) = ui.allocate_exact_size(vec2(2.0 * bx, 1.0), Sense::hover());
+            ui.painter().line_segment([pos2(r.left(), r.center().y), pos2(r.right(), r.center().y)], Stroke::new(1.0, crate::cs2::SHADOW));
+            // The first tool row sits 3 points under the header line (measured).
+            ui.add_space(-4.0);
+        }
+        if !cs2 { ui.allocate_ui_with_layout(vec2(bx, 14.0), egui::Layout::left_to_right(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 2.0;
             let (cr, resp) = ui.allocate_exact_size(vec2(bx.min(14.0), 14.0), Sense::click());
             let (shrink, grow) = if side == ToolbarSide::Right { ("chevrons-right", "chevrons-left") } else { ("chevrons-left", "chevrons-right") };
@@ -201,7 +227,7 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 crate::dock::persist_panels(app, ui.ctx());
             }
         });
-        ui.add_space(4.0);
+        ui.add_space(4.0); }
         // Subtle violet wash at the bottom of the toolbar.
         let full = ui.max_rect();
         if !t.bevel && !t.pro && t.dark() {
@@ -217,7 +243,11 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             mesh.add_triangle(0, 2, 3);
             ui.painter().add(mesh);
         }
-        ui.spacing_mut().item_spacing = vec2(2.0, 3.0);
+        ui.spacing_mut().item_spacing = if cs2 { vec2(0.0, crate::cs2::TOOL_ROW_GAP) } else { vec2(2.0, 3.0) };
+        if cs2 {
+            // Rows are exactly one cell tall (egui otherwise pads a row to interact_size).
+            ui.spacing_mut().interact_size.y = crate::cs2::TOOL_CELL.y;
+        }
         let flyout_id = egui::Id::unique("tool-flyout");
         let held_id = flyout_id.with("held");
         if ui.input(|i| i.pointer.any_pressed()) {
@@ -228,11 +258,12 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         // doesn't hide them.)
         let tool_tips = ui.data(|d| d.get_temp::<(egui::Id, Rect)>(flyout_id)).is_none() && !ui.input(|i| i.pointer.primary_down());
         let ctx = ui.ctx().clone();
-        let footer = (if t.pro { 8.0 } else { 14.0 })
+        // CS2 footer: four etched sections (swatches 53, quick mask 25, screen modes 20, ImageReady 25).
+        let footer = if cs2 { 4.0 * 2.0 + 53.0 + 27.0 + 22.0 + 25.0 + 4.0 } else { (if t.pro { 8.0 } else { 14.0 })
             + chips_height(t.pro, t.round_chips, t.round_chips && double)
             + 8.0
             + if double { bx } else { bx * 2.0 + 3.0 }
-            + 6.0;
+            + 6.0 };
         // As tall as the tools, so the colour chips sit right under them (Photoshop); a column
         // taller than the window scrolls and keeps the chips at the bottom.
         egui::ScrollArea::vertical()
@@ -242,9 +273,15 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
             .min_scrolled_height(0.0)
             .show(ui, |ui| {
                 // Pro has no group dividers, so its two columns fill every row across groups.
-                let sections: Vec<Vec<(usize, Vec<Tool>)>> = if t.pro { vec![sections.into_iter().flatten().collect()] } else { sections };
+                let sections: Vec<Vec<(usize, Vec<Tool>)>> = if t.pro && !cs2 { vec![sections.into_iter().flatten().collect()] } else { sections };
                 for (si, section) in sections.iter().enumerate() {
                     // Photoshop 2026 draws one uninterrupted column (no group dividers).
+                    if si > 0 && cs2 {
+                        // CS2 sections measure 23 per row + 2: one point either side of the divider.
+                        ui.add_space(-1.0);
+                        crate::cs2::etched_divider(ui, 2.0 * bx);
+                        ui.add_space(-1.0);
+                    }
                     if si > 0 && !t.pro {
                         ui.add_space(4.0);
                         let (r, _) = ui.allocate_exact_size(vec2(if double { bx * 2.0 + 2.0 } else { bx }, 1.0), Sense::hover());
@@ -262,9 +299,17 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                                     Some(sc) => format!("{}  ({})", tl!(tool.label()), crate::shortcuts::pretty(&sc)),
                                     None => tl!(tool.label()).to_string(),
                                 };
-                                let resp = icons::button_with_icon_size_tip(ui, icons::tool_icon(tool), bx, toolbar_icon_size(bx, t.pro), sel, &tip, tool_tips);
+                                let resp = if cs2 {
+                                    crate::cs2::tool_button(ui, icons::tool_icon(tool), sel, &tip, tool_tips)
+                                } else {
+                                    icons::button_with_icon_size_tip(ui, icons::tool_icon(tool), bx, toolbar_icon_size(bx, t.pro), sel, &tip, tool_tips)
+                                };
                                 if slot.len() > 1 {
-                                    paint_toolbar_flyout_indicator(ui, &t, &resp, side);
+                                    if cs2 {
+                                        crate::cs2::flyout_marker(ui.painter(), resp.rect);
+                                    } else {
+                                        paint_toolbar_flyout_indicator(ui, &t, &resp, side);
+                                    }
                                 }
                                 // Plain click selects the shown tool; Alt/Option-click cycles the
                                 // flyout slot to the next tool, as Shift+letter does for the key group.
@@ -436,6 +481,7 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         });
                     }
                 }
+                if !cs2 {
                 let more = icons::button(ui, "ellipsis", bx, false, tl!("Edit Toolbar…"));
                 if more.clicked()
                     && let Err(e) = crate::menus::invoke(app, &ctx, "edit.toolbar", json!({}))
@@ -444,8 +490,13 @@ pub fn toolbar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                     app.ui.status_error = true;
                 }
                 more_slot_flyout(app, ui, &more, &t, side);
+                }
                 reveal_focused_control(ui);
             });
+        if cs2 {
+            cs2_footer(app, ui, &ctx, tool_tips);
+            return;
+        }
         ui.add_space(if t.pro { 8.0 } else { 14.0 });
         // Centred in the tool column as it is before the tools scroll: a scroll bar widens the
         // UI it is in, and the chips moved over by its width (#7316).
@@ -719,5 +770,133 @@ pub(super) fn color_chips(app: &mut PhotocraftApp, ui: &mut egui::Ui, two_column
 fn chip_command(app: &mut PhotocraftApp, id: &str) {
     if app.run(id, json!({})).is_ok() {
         crate::type_tool::foreground_changed(app);
+    }
+}
+
+// ----------------------------------------------------------------------------- CS2 footer (fork)
+
+/// CS2's toolbox footer, measured from CS2: the overlapping colour swatches, the Standard / Quick
+/// Mask pair, the three screen modes and the ImageReady button (here: Save for Web), each section
+/// under an etched divider.
+fn cs2_footer(app: &mut PhotocraftApp, ui: &mut egui::Ui, ctx: &egui::Context, tips: bool) {
+    use crate::cs2::{SHADOW, etched_divider, paint_pressed, paint_raised};
+    let grid = 2.0 * crate::cs2::TOOL_CELL.x;
+    ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+    let section = |ui: &mut egui::Ui, h: f32| {
+        etched_divider(ui, grid);
+        ui.allocate_exact_size(vec2(grid, h), Sense::hover()).0
+    };
+    // Swatches: 28-point squares (grey frame, white line, colour), background offset 13/13.
+    let r = section(ui, 53.0);
+    let fg = Rect::from_min_size(r.min + vec2(3.0, 6.0), vec2(28.0, 28.0));
+    let bg = fg.translate(vec2(13.0, 13.0));
+    let p = ui.painter().clone();
+    let swatch = |rect: Rect, color: Color32| {
+        p.rect_filled(rect, 0.0, Color32::from_gray(192));
+        p.rect_filled(rect.shrink(1.0), 0.0, Color32::WHITE);
+        p.rect_filled(rect.shrink(2.0), 0.0, color);
+    };
+    swatch(bg, c32(app.session.tools.background));
+    swatch(fg, c32(app.session.tools.foreground));
+    let bg_resp = ui.interact(bg, ui.scope_id().with("cs2-bg"), Sense::click());
+    let fg_resp = ui.interact(fg, ui.scope_id().with("cs2-fg"), Sense::click());
+    if fg_resp.on_hover_text(tl!("Set foreground color")).clicked() {
+        crate::color_picker_ui::open(app, "foreground");
+    } else if bg_resp.on_hover_text(tl!("Set background color")).clicked() {
+        crate::color_picker_ui::open(app, "background");
+    }
+    // Default colours: two small overlapping squares, black over white.
+    let dr = Rect::from_min_size(r.min + vec2(1.0, 38.0), vec2(12.0, 11.0));
+    p.rect_filled(Rect::from_min_size(dr.min + vec2(4.0, 4.0), vec2(7.0, 7.0)), 0.0, Color32::BLACK);
+    p.rect_filled(Rect::from_min_size(dr.min + vec2(5.0, 5.0), vec2(5.0, 5.0)), 0.0, Color32::WHITE);
+    p.rect_filled(Rect::from_min_size(dr.min, vec2(7.0, 7.0)), 0.0, Color32::BLACK);
+    let sr = Rect::from_min_size(r.min + vec2(34.0, 5.0), vec2(10.0, 10.0));
+    crate::swap_arrow::paint(&p, sr.min, Color32::BLACK);
+    if ui.interact(sr, ui.scope_id().with("cs2-swap"), Sense::click()).on_hover_text(tl!("Switch Foreground and Background Colors (X)")).clicked() {
+        chip_command(app, "tools.swapColors");
+    }
+    if ui.interact(dr, ui.scope_id().with("cs2-default"), Sense::click()).on_hover_text(tl!("Default Foreground and Background Colors (D)")).clicked() {
+        chip_command(app, "tools.defaultColors");
+    }
+
+    // A footer button: pressed when on, raised on hover.
+    let button = |ui: &mut egui::Ui, rect: Rect, id: &str, on: bool, tip: &str, glyph: &dyn Fn(&egui::Painter, Rect)| -> egui::Response {
+        let resp = ui.interact(rect, ui.scope_id().with(id), Sense::click());
+        let p = ui.painter();
+        if on {
+            paint_pressed(p, rect);
+        } else if resp.hovered() {
+            paint_raised(p, rect);
+        }
+        glyph(p, rect);
+        if tips { resp.on_hover_text(tip) } else { resp }
+    };
+
+    // Standard mode / Quick Mask mode.
+    let r = section(ui, 27.0);
+    let quick_mask = app.session.active().is_some_and(|s| s.doc.quick_mask.is_some());
+    let std_cell = Rect::from_min_size(r.min + vec2(0.0, 3.0), vec2(24.0, 21.0));
+    let qm_cell = std_cell.translate(vec2(25.0, 0.0));
+    let mode_glyph = |dark: bool| {
+        move |p: &egui::Painter, c: Rect| {
+            let b = Rect::from_center_size(c.center(), vec2(18.0, 14.0));
+            p.rect_filled(b, 1.0, if dark { Color32::from_gray(128) } else { Color32::WHITE });
+            p.rect_stroke(b, 1.0, Stroke::new(1.0, Color32::from_gray(96)), StrokeKind::Inside);
+            p.circle_filled(b.center(), 4.5, if dark { Color32::WHITE } else { Color32::from_gray(240) });
+            p.circle_stroke(b.center(), 4.5, Stroke::new(1.0, Color32::from_gray(64)));
+        }
+    };
+    let s = button(ui, std_cell, "cs2-std", !quick_mask, &tl!("Edit in Standard Mode (Q)"), &mode_glyph(false));
+    let q = button(ui, qm_cell, "cs2-qm", quick_mask, &tl!("Edit in Quick Mask Mode (Q)"), &mode_glyph(true));
+    if (s.clicked() && quick_mask) || (q.clicked() && !quick_mask) {
+        let _ = crate::menus::invoke(app, ctx, "select.editInQuickMaskMode", json!({}));
+    }
+
+    // Screen modes: three 16-point buttons.
+    let r = section(ui, 22.0);
+    let modes = [
+        ("view.screenMode.standard", tl!("Standard Screen Mode (F)").to_string()),
+        ("view.screenMode.fullScreenWithMenuBar", tl!("Full Screen Mode With Menu Bar (F)").to_string()),
+        ("view.screenMode.fullScreen", tl!("Full Screen Mode (F)").to_string()),
+    ];
+    for (i, (id, tip)) in modes.iter().enumerate() {
+        let cell = Rect::from_min_size(r.min + vec2(i as f32 * 17.0, 3.0), vec2(16.0, 16.0));
+        let on = crate::view_cmds::checked(app, id).unwrap_or(false);
+        let glyph = move |p: &egui::Painter, c: Rect| {
+            let w = Rect::from_center_size(c.center(), vec2(11.0, 10.0));
+            p.rect_filled(w, 0.0, Color32::WHITE);
+            p.rect_stroke(w, 0.0, Stroke::new(1.0, Color32::from_gray(80)), StrokeKind::Inside);
+            let bar = Rect::from_min_size(w.min, vec2(w.width(), 2.0));
+            p.rect_filled(bar, 0.0, Color32::from_gray(80));
+            if i == 0 {
+                p.rect_filled(Rect::from_min_size(w.min + vec2(2.0, 4.0), vec2(5.0, 4.0)), 0.0, Color32::from_gray(150));
+            } else if i == 2 {
+                p.rect_filled(w.shrink2(vec2(1.0, 0.0)).translate(vec2(0.0, 1.0)).intersect(w.shrink(1.0)), 0.0, Color32::from_gray(150));
+            }
+        };
+        if button(ui, cell, id, on, tip, &glyph).clicked() {
+            let _ = crate::menus::invoke(app, ctx, id, json!({}));
+        }
+    }
+
+    // CS2's "Edit in ImageReady": PhotoCraft has no ImageReady, so it opens Save for Web.
+    let r = section(ui, 25.0);
+    let cell = Rect::from_min_size(r.min + vec2(0.0, 2.0), vec2(grid, 21.0));
+    let glyph = |p: &egui::Painter, c: Rect| {
+        let doc = Rect::from_min_size(pos2(c.center().x - 14.0, c.top() + 3.0), vec2(12.0, 15.0));
+        p.rect_filled(doc, 0.0, Color32::WHITE);
+        p.rect_stroke(doc, 0.0, Stroke::new(1.0, Color32::from_gray(64)), StrokeKind::Inside);
+        let y = c.center().y;
+        p.line_segment([pos2(doc.right() + 2.0, y), pos2(doc.right() + 12.0, y)], Stroke::new(2.0, Color32::from_gray(64)));
+        p.add(egui::Shape::convex_polygon(
+            vec![pos2(doc.right() + 16.0, y), pos2(doc.right() + 11.0, y - 4.0), pos2(doc.right() + 11.0, y + 4.0)],
+            Color32::from_gray(64),
+            Stroke::NONE,
+        ));
+        let globe = pos2(doc.right() + 22.0, y);
+        p.circle_stroke(globe, 5.0, Stroke::new(1.0, SHADOW.linear_multiply(0.6)));
+    };
+    if button(ui, cell, "cs2-web", false, &tl!("Save for Web"), &glyph).clicked() {
+        let _ = crate::menus::invoke(app, ctx, "file.export.saveForWebLegacy", json!({}));
     }
 }

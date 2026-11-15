@@ -155,6 +155,12 @@ impl ThemeKind {
     }
 }
 
+/// True for the Photoshop CS2 (Windows Vista/7) look. The fork repurposes Classic for it;
+/// every CS2-specific drawing path asks here, so it can move to its own theme in one place.
+pub fn is_cs2(t: &Tokens) -> bool {
+    t.kind == ThemeKind::Classic
+}
+
 /// Colour and shape tokens.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Tokens {
@@ -416,27 +422,27 @@ impl Tokens {
             },
             ThemeKind::Classic => Tokens {
                 kind,
-                chrome: Color32::from_rgb(212, 208, 200),
-                canvas: Color32::from_rgb(128, 128, 128),
-                canvas_dot: Color32::from_rgb(128, 128, 128),
-                dock: Color32::from_rgb(212, 208, 200),
-                card: Color32::from_rgb(212, 208, 200),
-                card_border: Color32::from_rgb(128, 128, 128),
+                chrome: Color32::from_rgb(240, 240, 240),
+                canvas: Color32::from_rgb(171, 171, 171),
+                canvas_dot: Color32::from_rgb(171, 171, 171),
+                dock: Color32::from_rgb(240, 240, 240),
+                card: Color32::from_rgb(240, 240, 240),
+                card_border: Color32::from_rgb(160, 160, 160),
                 field: Color32::WHITE,
-                field_border: Color32::from_rgb(128, 128, 128),
-                hover: Color32::from_rgb(226, 222, 214),
-                pressed: Color32::from_rgb(190, 186, 178),
+                field_border: Color32::from_rgb(160, 160, 160),
+                hover: Color32::from_rgb(248, 248, 248),
+                pressed: Color32::from_rgb(200, 200, 200),
                 text: Color32::BLACK,
                 text_dim: Color32::from_rgb(64, 64, 64),
-                text_faint: Color32::from_rgb(128, 128, 128),
+                text_faint: Color32::from_rgb(109, 109, 109),
                 icon: Color32::BLACK,
-                accent: Color32::from_rgb(10, 36, 106),
-                accent_soft: Color32::from_rgb(10, 36, 106),
-                accent_border: Color32::from_rgb(10, 36, 106),
+                accent: Color32::from_rgb(51, 153, 255),
+                accent_soft: Color32::from_rgb(51, 153, 255),
+                accent_border: Color32::from_rgb(51, 153, 255),
                 accent_text: Color32::WHITE,
-                separator: Color32::from_rgb(128, 128, 128),
+                separator: Color32::from_rgb(160, 160, 160),
                 shadow: Color32::from_black_alpha(0),
-                primary_bg: Color32::from_rgb(212, 208, 200),
+                primary_bg: Color32::from_rgb(240, 240, 240),
                 primary_text: Color32::BLACK,
                 danger: Color32::from_rgb(160, 0, 0),
                 warning: Color32::from_rgb(128, 96, 0),
@@ -446,8 +452,8 @@ impl Tokens {
                 bevel: true,
                 pro: true,
                 round_chips: false,
-                tab_strip: Color32::from_rgb(212, 208, 200),
-                row_selected: Color32::from_rgb(10, 36, 106),
+                tab_strip: Color32::from_rgb(199, 199, 199),
+                row_selected: Color32::from_rgb(51, 153, 255),
                 histogram_bg: Color32::from_gray(40),
                 histogram_level: 240,
                 caption_close: Color32::from_rgb(196, 43, 28),
