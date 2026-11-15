@@ -86,6 +86,18 @@ pub fn flyout_marker(painter: &egui::Painter, cell: Rect) {
 }
 
 /// The light-blue palette caption strip across `r`'s top.
+/// A document window's title bar height (CS2 on Windows 7, measured).
+pub const DOC_TITLE: f32 = 22.0;
+/// The outline of a palette drop preview: near black, as CS2's.
+pub const DROP_PREVIEW: Color32 = Color32::from_rgb(40, 44, 52);
+
+/// A document window's title bar: the caption gradient over its whole height, with a dark line
+/// under it.
+pub fn caption_fill(painter: &egui::Painter, r: Rect) {
+    gradient(painter, r, CAPTION_TOP, CAPTION_BOTTOM);
+    painter.line_segment([pos2(r.left(), r.bottom() - 0.5), pos2(r.right(), r.bottom() - 0.5)], Stroke::new(1.0, SHADOW));
+}
+
 pub fn caption_strip(painter: &egui::Painter, r: Rect) -> Rect {
     let strip = Rect::from_min_size(r.min, vec2(r.width(), CAPTION_HEIGHT));
     gradient(painter, strip, CAPTION_TOP, CAPTION_BOTTOM);
@@ -262,6 +274,22 @@ pub struct PaletteTab {
 /// `edge_all`: every tab has its dark left edge (the palette well's tabs), not only those after
 /// the first.
 pub fn paint_palette_tabs(painter: &egui::Painter, strip: Rect, body: Color32, tabs: &[PaletteTab], edge_all: bool) {
+    paint_tabs(painter, strip, body, tabs, edge_all, false);
+}
+
+/// Document tabs: the palette tabs' shape, with a darker inactive face, a dark outline and a soft
+/// shadow along each slope, so the shapes read on the light grey row.
+pub fn paint_doc_tabs(painter: &egui::Painter, strip: Rect, body: Color32, tabs: &[PaletteTab]) {
+    paint_tabs(painter, strip, body, tabs, false, true);
+}
+
+/// A document tab's outline.
+const DOC_OUTLINE: Color32 = Color32::from_rgb(118, 122, 128);
+/// A document tab's inactive face, top and bottom.
+const DOC_INACTIVE_TOP: Color32 = Color32::from_rgb(214, 216, 220);
+const DOC_INACTIVE_BOTTOM: Color32 = Color32::from_rgb(188, 191, 196);
+
+fn paint_tabs(painter: &egui::Painter, strip: Rect, body: Color32, tabs: &[PaletteTab], edge_all: bool, doc: bool) {
     let row = tab_row(strip);
     let painter = painter.with_clip_rect(row.intersect(painter.clip_rect()));
     // The slope starts 5 points after the label, or at the tab's own right edge when the row is
@@ -284,6 +312,13 @@ pub fn paint_palette_tabs(painter: &egui::Painter, strip: Rect, body: Color32, t
         let after_first = edge_all || first.is_some_and(|f| tab.rect.left() > f + 0.5);
         let edge = left;
         let pts = tab_outline(edge, s.max(edge + 1.0), top, bottom);
+        if doc {
+            slope_shadow(&painter, &pts);
+            fill_vertical(&painter, &pts, top, bottom, DOC_INACTIVE_TOP, DOC_INACTIVE_BOTTOM);
+            painter.add(egui::Shape::line(pts.clone(), Stroke::new(1.0, DOC_OUTLINE)));
+            painter.galley(text_at(tab, left), tab.galley.clone(), Color32::from_gray(40));
+            continue;
+        }
         fill_vertical(&painter, &pts, top, bottom, INACTIVE_TOP, INACTIVE_BOTTOM);
         if after_first {
             painter.line_segment([pos2(edge + 0.5, top), pos2(edge + 0.5, bottom)], Stroke::new(1.0, EDGE_DARK));
@@ -298,13 +333,28 @@ pub fn paint_palette_tabs(painter: &egui::Painter, strip: Rect, body: Color32, t
         let (left, s) = shape(tab);
         let (top, bottom) = (row.top() + 1.0, row.bottom());
         let pts = tab_outline(left, s, top, bottom);
+        if doc {
+            slope_shadow(&painter, &pts);
+        }
         painter.add(egui::Shape::convex_polygon(pts.clone(), body, Stroke::NONE));
         // Highlights: top, left edge, and along the slope.
         painter.line_segment([pos2(left, top + 0.5), pos2(s, top + 0.5)], Stroke::new(1.0, Color32::WHITE));
         painter.line_segment([pos2(left + 0.5, top), pos2(left + 0.5, bottom)], Stroke::new(1.0, Color32::WHITE));
         let edge: Vec<_> = pts[2..].iter().map(|p| *p + vec2(0.5, 0.0)).collect();
         painter.add(egui::Shape::line(edge, Stroke::new(1.0, Color32::from_rgb(250, 250, 250))));
+        if doc {
+            painter.add(egui::Shape::line(pts.clone(), Stroke::new(1.0, DOC_OUTLINE)));
+        }
         painter.galley(text_at(tab, left), tab.galley.clone(), Color32::BLACK);
+    }
+}
+
+/// A soft two-point shadow right of a tab's slope (`pts`: its outline, slope from the third point).
+fn slope_shadow(painter: &egui::Painter, pts: &[egui::Pos2]) {
+    let slope = pts.get(2..).unwrap_or_default();
+    for (dx, alpha) in [(2.0, 26), (1.0, 46)] {
+        let line: Vec<_> = slope.iter().map(|p| *p + vec2(dx, 0.0)).collect();
+        painter.add(egui::Shape::line(line, Stroke::new(1.0, Color32::from_black_alpha(alpha))));
     }
 }
 
@@ -621,18 +671,6 @@ pub fn left_of_toolbox(ctx: &egui::Context, area: Rect) -> f32 {
         .map_or(area.left(), |tb| (tb.right() + 3.0).clamp(area.left(), area.right()))
 }
 
-/// Where the work area's content ends, left of the palettes parked against its right edge (the
-/// CS2 default column), so the image, its scroll bars and Fit on Screen are not hidden under
-/// them. `palettes` are the floating palette windows' `[x, y, width, height]`.
-pub fn right_of_palettes(palettes: impl Iterator<Item = [f32; 4]>, area: Rect) -> f32 {
-    palettes
-        .map(|[x, y, w, h]| Rect::from_min_size(pos2(x, y), vec2(w, h)))
-        .filter(|r| r.intersects(area) && r.right() >= area.right() - 8.0)
-        .map(|r| r.left() - 3.0)
-        .fold(area.right(), f32::min)
-        .max(area.left())
-}
-
 // ------------------------------------------------------------------------------ keyboard
 
 thread_local! {
@@ -745,15 +783,6 @@ mod tests {
         assert_eq!(Tool::Note.key(), 'N');
         assert_eq!(Tool::RotateView.key(), '\0');
         set_active(false);
-    }
-
-    #[test]
-    fn the_canvas_stops_short_of_the_palette_column() {
-        let area = Rect::from_min_max(pos2(0.0, 60.0), pos2(1456.0, 790.0));
-        // The default column against the right edge, and one palette dragged into the middle.
-        let column = [[1242.0, 62.0, 212.0, 132.0], [1242.0, 195.0, 212.0, 131.0], [600.0, 300.0, 212.0, 200.0]];
-        assert_eq!(right_of_palettes(column.into_iter(), area), 1239.0);
-        assert_eq!(right_of_palettes(std::iter::empty(), area), 1456.0);
     }
 
     /// The toolbox alone over a 1000 x 700 work area, in the CS2 theme.

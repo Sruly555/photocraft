@@ -3704,6 +3704,23 @@ fn arrange_layout_only_includes_docked_documents() {
 }
 
 #[test]
+fn activating_a_floating_document_keeps_the_tab_the_main_canvas_showed() {
+    let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
+    for name in ["first", "second", "floating"] {
+        app.run("file.new", json!({"width": 80, "height": 60, "name": name})).unwrap();
+    }
+    let ctx = egui::Context::default();
+    crate::menus::invoke(&mut app, &ctx, "window.arrange.floatInWindow", json!({"document": 2})).unwrap();
+    // The second tab was in front when the floating window took the focus.
+    app.main_document = Some(1);
+    app.session.set_active(2);
+    assert_eq!(main_canvas_document(&app), Some(1), "the tab in front stays, not the first one");
+    // A remembered tab that has since floated (or closed) falls back to the first docked one.
+    app.main_document = Some(2);
+    assert_eq!(main_canvas_document(&app), Some(0));
+}
+
+#[test]
 fn torn_off_document_is_not_drawn_again_in_the_main_window() {
     for kind in [crate::theme::ThemeKind::Pro, crate::theme::ThemeKind::Studio] {
         let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());

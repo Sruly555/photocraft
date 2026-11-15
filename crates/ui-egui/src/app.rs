@@ -109,6 +109,7 @@ impl PhotocraftApp {
             last_canvas_rect: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0)),
             arrange_start: 0,
             drawing_window: None,
+            main_document: None,
             ppp: 1.0,
             drop_canvas_rect: None,
             tab_strip: None,

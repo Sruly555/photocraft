@@ -500,6 +500,9 @@ pub struct PhotocraftApp {
     /// The document window (`DocWindow::id`) whose canvas `canvas::extra_windows` is drawing.
     /// `scroll_all_windows::source` reads it to skip the view that a Hand drag moves itself.
     pub(crate) drawing_window: Option<u64>,
+    /// The tabbed document the main canvas showed last. While the active document is in a
+    /// floating window, the tab area keeps showing this one rather than jumping to the first tab.
+    pub(crate) main_document: Option<usize>,
     /// Physical pixels per egui point of the canvas last frame (`ctx.pixels_per_point`, which
     /// folds in both the display scale and Interface › UI Scale). The canvas maps document pixels
     /// to physical pixels, so point-space geometry divides the view zoom by this (see

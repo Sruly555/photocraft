@@ -371,7 +371,8 @@ pub(crate) const CS2_WORKSPACE: &str = "Photoshop CS2";
 /// (CS2's Color group also held Styles, which PhotoCraft does not have.)
 pub(crate) fn cs2_layout(area: egui::Rect) -> Layout<String> {
     let width = 212.0;
-    let x = area.right() - 2.0 - width;
+    // Left of the canvas's vertical scroll bar, which runs down the window's right edge.
+    let x = area.right() - crate::canvas::scrollbars::THICKNESS - 2.0 - width;
     let groups: [(&[&str], f32); 4] = [
         (&["navigator", "info", "histogram"], 132.0),
         (&["color", "swatches"], 131.0),
@@ -899,6 +900,9 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
         style.group_split_sides = craft_ui::docking::Sides { bottom: true, ..craft_ui::docking::Sides::NONE };
         // ...and the palette grows to take it, each keeping its height, as CS2's did.
         style.floating_splits_grow = true;
+        // Drop previews: dark, bold outlines (CS2 drew black ones), the moving tab at the pointer.
+        style.accent = crate::cs2::DROP_PREVIEW;
+        style.tab_drag_label = true;
     }
     let style = style.localized(|key| DOCK_LABELS.iter().find(|(k, _)| *k == key).map(|(_, english)| tl!(english).to_string()));
     let mut dock = craft_ui::docking::DockArea::new(area)
@@ -907,6 +911,13 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
         .input_blocked(modal_open(app, ui.ctx()));
     if let Some(panel) = &reveal {
         dock = dock.raise_panel(panel.clone());
+    }
+    if cs2 {
+        // CS2 palettes stay left of the canvas's vertical scroll bar at the window's right edge,
+        // and snap to it there.
+        let mut bounds = ui.ctx().content_rect();
+        bounds.max.x -= crate::canvas::scrollbars::THICKNESS;
+        dock = dock.float_bounds(bounds);
     }
     #[cfg(not(target_arch = "wasm32"))]
     {

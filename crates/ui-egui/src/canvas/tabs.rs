@@ -105,19 +105,9 @@ fn documents(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         paint_dots(ui, ui.available_rect_before_wrap(), app.session.prefs().interface.show_canvas_dots);
         return;
     };
+    app.main_document = Some(idx);
     let main_focused = ui.ctx().input(|i| i.viewport().focused.unwrap_or(true));
-    let mut rect = ui.available_rect_before_wrap();
-    let t = crate::theme::Tokens::get(ui.ctx());
-    if crate::theme::is_cs2(&t) {
-        // The canvas and its vertical ruler start at the work area's left edge, as in CS2: the
-        // toolbox floats just right of the ruler (`toolbar::floating_toolbox`). On the right
-        // the canvas stops short of the palette column, so its scroll bar stays visible.
-        let left = rect.left();
-        let palettes = app.ui.docking.iter().flat_map(|w| w.layout.floating.iter().filter(|f| !f.minimized).map(|f| f.rect));
-        let right = crate::cs2::right_of_palettes(palettes, rect).max(left + 120.0).min(rect.right());
-        ui.painter().rect_filled(Rect::from_min_max(pos2(right, rect.top()), rect.max), 0.0, t.canvas);
-        rect = Rect::from_min_max(pos2(left, rect.top()), pos2(right, rect.bottom()));
-    }
+    let rect = ui.available_rect_before_wrap();
     app.last_canvas_rect = rect;
     app.drop_canvas_rect = Some(rect);
     // Window › Arrange: tiled / n-up layouts show several documents side by side; the active one
@@ -599,7 +589,12 @@ fn studio_tab_name(app: &PhotocraftApp, st: &photocraft_engine::DocState) -> Str
 fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
     let t = crate::theme::Tokens::get(ui.ctx());
     let documents = docked_document_indices(app);
-    let active_doc = app.session.active_index().filter(|_| app.jobs.focus.is_none());
+    // While the active document is in a floating window, the tab the canvas still shows stays lit.
+    let active_doc = app
+        .session
+        .active_index()
+        .filter(|_| app.jobs.focus.is_none())
+        .map(|doc| if crate::view_cmds::document_is_floating(app, doc) { main_canvas_document(app).unwrap_or(doc) } else { doc });
     let active = active_doc.and_then(|doc| documents.iter().position(|&d| d == doc));
     let (mut activate, mut close) = (None, None);
     let mut tab_action = None;
@@ -747,7 +742,7 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
         }
     }
     if cs2 {
-        crate::cs2::paint_palette_tabs(ui.painter(), row, t.chrome, &cs2_tabs, false);
+        crate::cs2::paint_doc_tabs(ui.painter(), row, t.chrome, &cs2_tabs);
         for (xr, sel, hovered) in &cs2_closes {
             crate::cs2::paint_doc_close(ui.painter(), *xr, *sel, *hovered);
         }
@@ -938,7 +933,7 @@ pub fn extra_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
 /// to move; double-click or Maximize puts the document back in the tabs; Close closes it), a
 /// resize grip, and a canvas that owns every press inside it, so painting never moves the window.
 fn cs2_document_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
-    const TITLE: f32 = 20.0;
+    const TITLE: f32 = crate::cs2::DOC_TITLE;
     const GRIP: f32 = 12.0;
     let wins = app.ui.windows.clone();
     let work = app.last_canvas_rect.intersect(ctx.content_rect());
@@ -958,7 +953,7 @@ fn cs2_document_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
             Rect::from_min_size(egui::pos2(left + 8.0, work.top() + 24.0) + egui::Vec2::splat(22.0 * (n % 8) as f32), size)
         });
         let focused = app.session.active_index() == Some(w.document);
-        let (mut maximize, mut close) = (false, false);
+        let (mut maximize, mut minimize, mut close) = (false, false, false);
         // Under the toolbox and palettes (Middle), as CS2 kept its palettes above documents.
         egui::Area::new(id).fixed_pos(rect.min).order(egui::Order::Background).show(ctx, |ui| {
             let (frame, _) = ui.allocate_exact_size(rect.size(), Sense::hover());
@@ -966,24 +961,29 @@ fn cs2_document_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
             painter.rect_filled(frame, 0.0, crate::theme::Tokens::get(ui.ctx()).chrome);
             // Title bar: the palette caption gradient, the name, Maximize and Close.
             let bar = Rect::from_min_size(frame.min, egui::vec2(frame.width(), TITLE));
-            crate::cs2::caption_strip(painter, bar);
+            crate::cs2::caption_fill(painter, bar);
             let close_r = Rect::from_center_size(egui::pos2(bar.right() - 11.0, bar.center().y), egui::vec2(15.0, 13.0));
             let max_r = close_r.translate(egui::vec2(-17.0, 0.0));
+            let min_r = max_r.translate(egui::vec2(-17.0, 0.0));
             let ink = if focused { Color32::BLACK } else { Color32::from_gray(90) };
-            painter.with_clip_rect(bar.with_max_x(max_r.left() - 4.0)).text(
+            painter.with_clip_rect(bar.with_max_x(min_r.left() - 4.0)).text(
                 egui::pos2(bar.left() + 6.0, bar.center().y),
                 egui::Align2::LEFT_CENTER,
                 &title,
                 egui::FontId::proportional(crate::cs2::PALETTE_FONT),
                 ink,
             );
-            let drag = ui.interact(bar.with_max_x(max_r.left() - 2.0), id.with("title"), Sense::click_and_drag());
+            let drag = ui.interact(bar.with_max_x(min_r.left() - 2.0), id.with("title"), Sense::click_and_drag());
             if drag.dragged() {
                 rect = rect.translate(drag.drag_delta());
             }
             if drag.double_clicked() {
                 maximize = true;
             }
+            // Minimize puts the document back among the tabs, leaving the tab you work on in front.
+            let min_b = ui.interact(min_r, id.with("min"), Sense::click()).on_hover_text(tl!("Minimize"));
+            crate::cs2::caption_button_glyph(ui.painter(), min_r, crate::cs2::Caption::Minimize, min_b.hovered());
+            minimize |= min_b.clicked();
             let max_b = ui.interact(max_r, id.with("max"), Sense::click()).on_hover_text(tl!("Maximize"));
             crate::cs2::caption_button_glyph(ui.painter(), max_r, crate::cs2::Caption::Maximize, max_b.hovered());
             maximize |= max_b.clicked();
@@ -992,7 +992,9 @@ fn cs2_document_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
             close |= close_b.clicked();
             // The canvas, inside a 1-point frame.
             let canvas = Rect::from_min_max(egui::pos2(frame.left() + 1.0, bar.bottom()), frame.max - egui::vec2(1.0, 1.0));
-            if ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| frame.contains(p))) && !focused {
+            let on_buttons = |p: egui::Pos2| min_r.union(close_r).expand(1.0).contains(p);
+            let pressed = ui.input(|i| if i.pointer.any_pressed() { i.pointer.interact_pos() } else { None });
+            if pressed.is_some_and(|p| frame.contains(p) && !on_buttons(p)) && !focused {
                 app.session.set_active(w.document);
             }
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(canvas).id_salt(("cs2-docwin-canvas", w.id)));
@@ -1025,10 +1027,14 @@ fn cs2_document_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
         if let Some(win) = app.ui.windows.iter_mut().find(|x| x.id == w.id) {
             win.view = view;
             win.focused = focused;
-            // Maximize returns the document to the tabs; Close does too, then closes it.
-            if maximize || close {
+            // Maximize and Minimize return the document to the tabs; Close does too, then closes it.
+            if maximize || minimize || close {
                 win.open = false;
             }
+        }
+        // Minimize: the tab area keeps the document it showed, in front.
+        if minimize && let Some(front) = app.main_document.filter(|d| *d != w.document) {
+            app.session.set_active(front);
         }
         if close {
             let _ = crate::menus::invoke(app, ctx, "file.close", json!({"document": w.document}));
@@ -1077,7 +1083,9 @@ pub(super) fn main_canvas_document(app: &PhotocraftApp) -> Option<usize> {
     if !crate::view_cmds::document_is_floating(app, active) {
         return Some(active);
     }
-    docked_document_indices(app).into_iter().next()
+    // The active document is in a floating window: keep the tab that was showing.
+    let docked = docked_document_indices(app);
+    app.main_document.filter(|d| docked.contains(d)).or_else(|| docked.first().copied())
 }
 
 /// Convert a final tab index in the visible (docked-only) strip to the document list index,

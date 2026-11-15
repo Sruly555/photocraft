@@ -130,8 +130,26 @@ pub fn well(app: &mut PhotocraftApp, ui: &mut egui::Ui, browse_tip: &str) -> boo
     let geometry = Geometry { well: drawn.well, tabs: ids.iter().cloned().zip(drawn.tabs.iter().map(|t| t.rect)).collect() };
     ui.ctx().data_mut(|d| d.insert_temp(geometry_id(), geometry.clone()));
     // A tab dragged out of the well floats its palette where it is let go.
-    for ((id, _), response) in geometry.tabs.iter().zip(&drawn.tabs) {
+    let count = geometry.tabs.len();
+    let mut moved: Option<(usize, usize)> = None;
+    for (index, ((id, _), response)) in geometry.tabs.iter().zip(&drawn.tabs).enumerate() {
         let response = &response.response;
+        // Right-click: move the tab along the well, as CS2's tab menu did.
+        response.context_menu(|ui| {
+            let last = count.saturating_sub(1);
+            let items = [
+                (tl!("Move To Left"), index > 0, index.saturating_sub(1)),
+                (tl!("Move To Right"), index < last, (index + 1).min(last)),
+                (tl!("Move To Beginning"), index > 0, 0),
+                (tl!("Move To End"), index < last, last),
+            ];
+            for (text, enabled, to) in items {
+                if ui.add_enabled(enabled, egui::Button::new(text)).clicked() {
+                    moved = Some((index, to));
+                    ui.close();
+                }
+            }
+        });
         if response.dragged()
             && let Some(p) = ui.ctx().pointer_interact_pos()
             && !drawn.well.expand(6.0).contains(p)
@@ -158,7 +176,32 @@ pub fn well(app: &mut PhotocraftApp, ui: &mut egui::Ui, browse_tip: &str) -> boo
             });
         }
     }
+    if let Some((from, to)) = moved {
+        let ids: Vec<String> = geometry.tabs.iter().map(|(id, _)| id.clone()).collect();
+        set_panels(app, reorder(panels(app), &ids, from, to));
+    }
     drawn.browse
+}
+
+/// `list` with the shown tab at `from` moved to shown position `to`. `shown` are the tabs the
+/// well draws (the list's palettes it can show), so a stored id the build doesn't know keeps its
+/// place.
+fn reorder(mut list: Vec<String>, shown: &[String], from: usize, to: usize) -> Vec<String> {
+    let (Some(id), Some(target)) = (shown.get(from), shown.get(to)) else { return list };
+    if from == to {
+        return list;
+    }
+    let Some(at) = list.iter().position(|p| p == id) else { return list };
+    let moving = list.remove(at);
+    let Some(mut dest) = list.iter().position(|p| p == target) else {
+        list.insert(at.min(list.len()), moving);
+        return list;
+    };
+    if to > from {
+        dest += 1;
+    }
+    list.insert(dest.min(list.len()), moving);
+    list
 }
 
 /// The palette dropped down from the well, if one is: under its tab, over everything else. A
@@ -189,14 +232,14 @@ pub fn dropdown(app: &mut PhotocraftApp, ctx: &egui::Context) {
         ui.painter().rect_stroke(frame, 0.0, Stroke::new(1.0, crate::cs2::FRAME), StrokeKind::Inside);
     });
     let layer = shown.response.layer_id;
-    let fold = ctx.input(|i| {
-        i.pointer.any_pressed()
-            && i.pointer.interact_pos().is_some_and(|p| {
-                let on_tabs = geometry.tabs.iter().any(|(_, r)| r.contains(p));
-                // A popup the palette opened (a menu, a combo box) is on another foreground layer.
-                let on_popup = ctx.layer_id_at(p).is_some_and(|l| l != layer && matches!(l.order, egui::Order::Foreground | egui::Order::Tooltip));
-                !rect.contains(p) && !on_tabs && !on_popup
-            })
+    // Read the press first, then ask which layer is under it: `layer_id_at` takes the context's
+    // lock, and taking it inside `ctx.input` deadlocks the window when another thread waits on it.
+    let pressed = ctx.input(|i| if i.pointer.any_pressed() { i.pointer.interact_pos() } else { None });
+    let fold = pressed.is_some_and(|p| {
+        let on_tabs = geometry.tabs.iter().any(|(_, r)| r.contains(p));
+        // A popup the palette opened (a menu, a combo box) is on another foreground layer.
+        let on_popup = ctx.layer_id_at(p).is_some_and(|l| l != layer && matches!(l.order, egui::Order::Foreground | egui::Order::Tooltip));
+        !rect.contains(p) && !on_tabs && !on_popup
     });
     if fold || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
         ctx.data_mut(|d| d.remove::<String>(open_id()));
@@ -223,6 +266,22 @@ mod tests {
         assert_eq!(panels(&app).len(), 4);
         undock(&mut app, "brushes", pos2(400.0, 200.0));
         assert_eq!(panels(&app), ["toolPresets", "layerComps", "navigator"]);
+    }
+
+    #[test]
+    fn the_tab_menu_moves_a_tab_along_the_well() {
+        let ids = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();
+        let shown = ids(&["a", "b", "c", "d"]);
+        assert_eq!(reorder(shown.clone(), &shown, 2, 1), ids(&["a", "c", "b", "d"]));
+        assert_eq!(reorder(shown.clone(), &shown, 1, 2), ids(&["a", "c", "b", "d"]));
+        assert_eq!(reorder(shown.clone(), &shown, 2, 0), ids(&["c", "a", "b", "d"]));
+        assert_eq!(reorder(shown.clone(), &shown, 0, 3), ids(&["b", "c", "d", "a"]));
+        // Out of range or in place: unchanged.
+        assert_eq!(reorder(shown.clone(), &shown, 9, 0), shown);
+        assert_eq!(reorder(shown.clone(), &shown, 1, 1), shown);
+        // An id the well can't show keeps its place in the stored list.
+        let stored = ids(&["a", "x", "b", "c"]);
+        assert_eq!(reorder(stored, &ids(&["a", "b", "c"]), 2, 0), ids(&["c", "a", "x", "b"]));
     }
 
     #[test]
