@@ -597,6 +597,9 @@ pub const SHORTCUTS: &[(&str, &str)] = &[
     ("channel.target.slot8", "Cmd+6"),
     ("channel.target.slot9", "Cmd+7"),
     ("edit.pasteSpecial.pasteInto", "Cmd+Shift+V"),
+    // Ctrl+F applies the last filter, as before Photoshop moved it to Ctrl+Alt+F for Search.
+    ("filter.lastFilter", "Cmd+F"),
+    ("edit.search", ""),
     ("edit.pasteSpecial.pasteInPlace", ""),
     ("select.selectAndMask", ""),
     ("filter.adaptiveWideAngle", ""),
@@ -664,6 +667,7 @@ mod tests {
         assert_eq!(crate::shortcuts::default_shortcut("select.modify.feather").as_deref(), Some("Cmd+Alt+D"));
         assert_eq!(crate::shortcuts::default_shortcut("channel.target.slot3").as_deref(), Some("Cmd+1"));
         assert_eq!(crate::shortcuts::default_shortcut("edit.pasteSpecial.pasteInPlace"), None);
+        assert_eq!(crate::shortcuts::default_shortcut("filter.lastFilter").as_deref(), Some("Cmd+F"));
         assert_eq!(Tool::Blur.key(), 'R');
         assert_eq!(Tool::Note.key(), 'N');
         assert_eq!(Tool::RotateView.key(), '\0');
