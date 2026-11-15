@@ -223,7 +223,8 @@ pub(crate) fn dock_panel_rect(ctx: &egui::Context) -> egui::Rect {
 pub(crate) fn canvas_panel(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let backdrop = if app.ui.view.hides_chrome() { egui::Color32::BLACK } else { crate::prefs_ui::pasteboard_color(app).unwrap_or(t.canvas) };
-    if app.ui.panels.rail && t.pro {
+    // CS2 has no icon rail: its palettes float over the work area.
+    if app.ui.panels.rail && t.pro && !crate::theme::is_cs2(&t) {
         rail(app, ui, &t);
     }
     egui::CentralPanel::default().frame(egui::Frame::NONE.fill(backdrop)).show(ui, |ui| crate::canvas::document_area(app, ui));

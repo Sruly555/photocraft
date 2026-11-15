@@ -509,9 +509,7 @@ fn color_wheel_ignores_clicks_beside_it() {
 /// slider modes' ramp does, instead of running past the group's bottom into its scroll area.
 #[test]
 fn color_wheel_fits_the_default_color_group() {
-    // Classic is the CS2 theme: its Color palette floats at CS2's measured 131 points, not at the
-    // dock's default height, and CS2 had no Color Wheel.
-    for kind in ThemeKind::ALL.into_iter().filter(|k| *k != ThemeKind::Classic) {
+    for kind in ThemeKind::ALL {
         let mut app = PhotocraftApp::new(photocraft_engine::Session::new(), crate::Services::default());
         app.ui.color_panel.mode = ColorPanelMode::ColorWheel;
         app.ui.theme = kind;

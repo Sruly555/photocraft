@@ -934,53 +934,104 @@ pub fn extra_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
 }
 
 /// CS2 document windows: floating inside the application window, as Photoshop's were, rather
-/// than as OS windows that would each add a taskbar button.
+/// than as OS windows that would each add a taskbar button. Each has a CS2 title bar (drag it
+/// to move; double-click or Maximize puts the document back in the tabs; Close closes it), a
+/// resize grip, and a canvas that owns every press inside it, so painting never moves the window.
 fn cs2_document_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
+    const TITLE: f32 = 20.0;
+    const GRIP: f32 = 12.0;
     let wins = app.ui.windows.clone();
-    let work = ctx.content_rect();
-    for w in wins.into_iter().filter(|w| w.open) {
+    let work = app.last_canvas_rect.intersect(ctx.content_rect());
+    let work = if work.is_positive() { work } else { ctx.content_rect() };
+    for (n, w) in wins.into_iter().filter(|w| w.open).enumerate() {
         let Some(st) = app.session.documents().get(w.document) else { continue };
         let title = titled_name(st);
         let owned = w.floating.then(|| app.ui.views.get(w.document).cloned()).flatten();
         let shares = owned.is_some();
         let mut view = owned.unwrap_or_else(|| app.ui.windows.iter().find(|x| x.id == w.id).map_or_else(|| w.view.clone(), |x| x.view.clone()));
-        let mut open = true;
-        let focused = app.session.active_index() == Some(w.document);
-        let mut window = egui::Window::new(title)
-            .id(egui::Id::unique(("cs2-docwin", w.id)))
-            .default_size([640.0, 480.0])
-            .min_size([160.0, 120.0])
-            .constrain_to(work)
-            .collapsible(false)
-            .resizable(true)
-            .open(&mut open)
-            .frame(egui::Frame::window(&ctx.global_style()).inner_margin(0.0).corner_radius(0.0));
-        if let Some([x, y]) = w.position {
-            // A tab torn off at a screen position lands there, kept inside the main window.
-            window = window.default_pos([x.clamp(work.left(), work.right() - 160.0), y.clamp(work.top(), work.bottom() - 120.0)]);
-        }
-        let shown = window.show(ctx, |ui| {
-            let rect = ui.available_rect_before_wrap();
-            app.drawing_window = Some(w.id);
-            view = canvas_view(app, ui, w.document, rect, view.clone(), focused);
-            app.drawing_window = None;
-            ui.allocate_rect(rect, Sense::hover());
+        let id = egui::Id::unique(("cs2-docwin", w.id));
+        // The window's rect lives in egui's memory; a new one cascades from the work area's corner.
+        let mut rect = ctx.data(|d| d.get_temp::<Rect>(id)).unwrap_or_else(|| {
+            let size = egui::vec2(640.0_f32.min(work.width() - 40.0), 480.0_f32.min(work.height() - 40.0)).max(egui::vec2(200.0, 150.0));
+            // Right of the toolbox when it sits at the left edge, as CS2 opened documents.
+            let left = crate::cs2::left_of_toolbox(ctx, work).max(work.left() + 20.0);
+            Rect::from_min_size(egui::pos2(left + 8.0, work.top() + 24.0) + egui::Vec2::splat(22.0 * (n % 8) as f32), size)
         });
-        if let Some(r) = shown
-            && !focused
-            && ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| r.response.rect.contains(p)))
-        {
-            app.session.set_active(w.document);
-        }
+        let focused = app.session.active_index() == Some(w.document);
+        let (mut maximize, mut close) = (false, false);
+        // Under the toolbox and palettes (Middle), as CS2 kept its palettes above documents.
+        egui::Area::new(id).fixed_pos(rect.min).order(egui::Order::Background).show(ctx, |ui| {
+            let (frame, _) = ui.allocate_exact_size(rect.size(), Sense::hover());
+            let painter = ui.painter();
+            painter.rect_filled(frame, 0.0, crate::theme::Tokens::get(ui.ctx()).chrome);
+            // Title bar: the palette caption gradient, the name, Maximize and Close.
+            let bar = Rect::from_min_size(frame.min, egui::vec2(frame.width(), TITLE));
+            crate::cs2::caption_strip(painter, bar);
+            let close_r = Rect::from_center_size(egui::pos2(bar.right() - 11.0, bar.center().y), egui::vec2(15.0, 13.0));
+            let max_r = close_r.translate(egui::vec2(-17.0, 0.0));
+            let ink = if focused { Color32::BLACK } else { Color32::from_gray(90) };
+            painter.with_clip_rect(bar.with_max_x(max_r.left() - 4.0)).text(
+                egui::pos2(bar.left() + 6.0, bar.center().y),
+                egui::Align2::LEFT_CENTER,
+                &title,
+                egui::FontId::proportional(crate::cs2::PALETTE_FONT),
+                ink,
+            );
+            let drag = ui.interact(bar.with_max_x(max_r.left() - 2.0), id.with("title"), Sense::click_and_drag());
+            if drag.dragged() {
+                rect = rect.translate(drag.drag_delta());
+            }
+            if drag.double_clicked() {
+                maximize = true;
+            }
+            let max_b = ui.interact(max_r, id.with("max"), Sense::click()).on_hover_text(tl!("Maximize"));
+            crate::cs2::caption_button_glyph(ui.painter(), max_r, crate::cs2::Caption::Maximize, max_b.hovered());
+            maximize |= max_b.clicked();
+            let close_b = ui.interact(close_r, id.with("close"), Sense::click()).on_hover_text(tl!("Close"));
+            crate::cs2::caption_button_glyph(ui.painter(), close_r, crate::cs2::Caption::Close, close_b.hovered());
+            close |= close_b.clicked();
+            // The canvas, inside a 1-point frame.
+            let canvas = Rect::from_min_max(egui::pos2(frame.left() + 1.0, bar.bottom()), frame.max - egui::vec2(1.0, 1.0));
+            if ui.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| frame.contains(p))) && !focused {
+                app.session.set_active(w.document);
+            }
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(canvas).id_salt(("cs2-docwin-canvas", w.id)));
+            child.set_clip_rect(canvas);
+            app.drawing_window = Some(w.id);
+            view = canvas_view(app, &mut child, w.document, canvas, view.clone(), focused);
+            app.drawing_window = None;
+            // Resize grip at the bottom right.
+            let grip = Rect::from_min_size(frame.max - egui::Vec2::splat(GRIP), egui::Vec2::splat(GRIP));
+            let g = ui.interact(grip, id.with("grip"), Sense::drag());
+            if g.hovered() || g.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeNwSe);
+            }
+            if g.dragged() {
+                rect.max = (rect.max + g.drag_delta()).max(rect.min + egui::vec2(200.0, 150.0));
+            }
+            for k in 0..3 {
+                let o = 3.0 + 3.0 * k as f32;
+                ui.painter().line_segment([frame.max - egui::vec2(o, 2.0), frame.max - egui::vec2(2.0, o)], Stroke::new(1.0, crate::cs2::SHADOW));
+            }
+            ui.painter().rect_stroke(frame, 0.0, Stroke::new(1.0, crate::cs2::FRAME), egui::StrokeKind::Inside);
+        });
+        // Keep the title bar reachable inside the work area.
+        let max_min = (work.max - egui::vec2(80.0, TITLE)).max(work.min);
+        rect = rect.translate(rect.min.clamp(work.min, max_min) - rect.min);
+        ctx.data_mut(|d| d.insert_temp(id, rect));
         if shares && let Some(v) = app.ui.views.get_mut(w.document) {
             *v = view.clone();
         }
         if let Some(win) = app.ui.windows.iter_mut().find(|x| x.id == w.id) {
             win.view = view;
             win.focused = focused;
-            if !open {
+            // Maximize returns the document to the tabs; Close does too, then closes it.
+            if maximize || close {
                 win.open = false;
             }
+        }
+        if close {
+            let _ = crate::menus::invoke(app, ctx, "file.close", json!({"document": w.document}));
         }
     }
     app.ui.windows.retain(|w| w.open);

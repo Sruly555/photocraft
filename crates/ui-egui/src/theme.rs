@@ -52,6 +52,10 @@ pub enum ThemeKind {
     SoftDark,
     /// A low-contrast light theme: pale violet-grey surfaces, softened dark text and a periwinkle accent.
     SoftLight,
+    /// Photoshop CS2 on Windows Vista/7: floating palettes, sloped tabs, Vista colours. Not in
+    /// [`Self::ALL`] (the themes every test sweeps): it reshapes the toolbox, palettes and bars,
+    /// and has its own tests (`cs2`).
+    Cs2,
 }
 
 impl ThemeKind {
@@ -80,6 +84,7 @@ impl ThemeKind {
             ThemeKind::Studio => "Studio (Dark)",
             ThemeKind::StudioLight => "Studio (Light)",
             ThemeKind::Classic => "Classic",
+            ThemeKind::Cs2 => "Classic (CS2)",
             ThemeKind::Adwaita => "Adwaita (Light)",
             ThemeKind::AdwaitaDark => "Adwaita (Dark)",
             ThemeKind::SolarizedDark => "Solarized Dark",
@@ -100,6 +105,7 @@ impl ThemeKind {
             ThemeKind::Studio => "studio",
             ThemeKind::StudioLight => "studioLight",
             ThemeKind::Classic => "classic",
+            ThemeKind::Cs2 => "cs2",
             ThemeKind::Adwaita => "adwaita",
             ThemeKind::AdwaitaDark => "adwaitaDark",
             ThemeKind::SolarizedDark => "solarizedDark",
@@ -143,6 +149,7 @@ impl ThemeKind {
             "studio" | "studiodark" => Some(ThemeKind::Studio),
             "studiolight" => Some(ThemeKind::StudioLight),
             "classic" | "win2000" | "retro" => Some(ThemeKind::Classic),
+            "cs2" | "classiccs2" | "photoshopcs2" | "vista" => Some(ThemeKind::Cs2),
             "adwaita" | "adwaitalight" | "gnome" | "gnomelight" => Some(ThemeKind::Adwaita),
             "adwaitadark" | "gnomedark" => Some(ThemeKind::AdwaitaDark),
             "solarizeddark" | "solarized" => Some(ThemeKind::SolarizedDark),
@@ -155,10 +162,9 @@ impl ThemeKind {
     }
 }
 
-/// True for the Photoshop CS2 (Windows Vista/7) look. The fork repurposes Classic for it;
-/// every CS2-specific drawing path asks here, so it can move to its own theme in one place.
+/// True for the Photoshop CS2 (Windows Vista/7) look; every CS2-specific drawing path asks here.
 pub fn is_cs2(t: &Tokens) -> bool {
-    t.kind == ThemeKind::Classic
+    t.kind == ThemeKind::Cs2
 }
 
 /// Colour and shape tokens.
@@ -421,6 +427,46 @@ impl Tokens {
                 scrim: Color32::from_black_alpha(110),
             },
             ThemeKind::Classic => Tokens {
+                kind,
+                chrome: Color32::from_rgb(212, 208, 200),
+                canvas: Color32::from_rgb(128, 128, 128),
+                canvas_dot: Color32::from_rgb(128, 128, 128),
+                dock: Color32::from_rgb(212, 208, 200),
+                card: Color32::from_rgb(212, 208, 200),
+                card_border: Color32::from_rgb(128, 128, 128),
+                field: Color32::WHITE,
+                field_border: Color32::from_rgb(128, 128, 128),
+                hover: Color32::from_rgb(226, 222, 214),
+                pressed: Color32::from_rgb(190, 186, 178),
+                text: Color32::BLACK,
+                text_dim: Color32::from_rgb(64, 64, 64),
+                text_faint: Color32::from_rgb(128, 128, 128),
+                icon: Color32::BLACK,
+                accent: Color32::from_rgb(10, 36, 106),
+                accent_soft: Color32::from_rgb(10, 36, 106),
+                accent_border: Color32::from_rgb(10, 36, 106),
+                accent_text: Color32::WHITE,
+                separator: Color32::from_rgb(128, 128, 128),
+                shadow: Color32::from_black_alpha(0),
+                primary_bg: Color32::from_rgb(212, 208, 200),
+                primary_text: Color32::BLACK,
+                danger: Color32::from_rgb(160, 0, 0),
+                warning: Color32::from_rgb(128, 96, 0),
+                radius_sm: 0.0,
+                radius: 0.0,
+                radius_lg: 0.0,
+                bevel: true,
+                pro: false,
+                round_chips: false,
+                tab_strip: Color32::from_rgb(212, 208, 200),
+                row_selected: Color32::from_rgb(10, 36, 106),
+                histogram_bg: Color32::from_gray(40),
+                histogram_level: 240,
+                caption_close: Color32::from_rgb(196, 43, 28),
+                caption_close_text: Color32::WHITE,
+                scrim: Color32::from_black_alpha(110),
+            },
+            ThemeKind::Cs2 => Tokens {
                 kind,
                 chrome: Color32::from_rgb(240, 240, 240),
                 canvas: Color32::from_rgb(171, 171, 171),

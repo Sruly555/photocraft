@@ -840,7 +840,10 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
             app.ui.workspace = CS2_WORKSPACE.to_owned();
             app.ui.docking = None;
         }
-        if app.ui.workspace == CS2_WORKSPACE && app.ui.docking.is_none() {
+        // CS2 palettes only float. A layout with panels docked into the work area (saved before
+        // docking was turned off for CS2) is laid out afresh.
+        let docked = app.ui.docking.as_ref().is_some_and(|w| !matches!(&w.layout.root, Some(Node::Tabs { panels, .. }) if panels.iter().all(|p| p == CANVAS)));
+        if app.ui.workspace == CS2_WORKSPACE && (app.ui.docking.is_none() || docked) {
             install_cs2(app, ui.available_rect_before_wrap());
         }
     }
@@ -885,6 +888,17 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
         style.floating_stroke = egui::Stroke::new(1.0, crate::cs2::FRAME);
         // CS2's palettes drag by their caption; no wide drag bar takes room from the tabs.
         style.drag_bar_width = 6.0;
+        // CS2 palettes only float: no docks along the work area's edges, a drop on no palette
+        // floats there, and a palette moved by its caption snaps to the others and the edges.
+        style.new_dock_zones = false;
+        style.drop_edges = craft_ui::docking::Sides::NONE;
+        style.float_on_empty_drop = true;
+        style.title_bar_docks = false;
+        style.snap_distance = 8.0;
+        // A tab dropped on a palette's bottom docks below it; elsewhere on it, it joins its tabs.
+        style.group_split_sides = craft_ui::docking::Sides { bottom: true, ..craft_ui::docking::Sides::NONE };
+        // ...and the palette grows to take it, each keeping its height, as CS2's did.
+        style.floating_splits_grow = true;
     }
     let style = style.localized(|key| DOCK_LABELS.iter().find(|(k, _)| *k == key).map(|(_, english)| tl!(english).to_string()));
     let mut dock = craft_ui::docking::DockArea::new(area)
@@ -919,13 +933,24 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
             } else {
                 // The native group's smallest height, tab strip included.
                 let height = PANELS.iter().find(|p| p.0 == id).map_or(80.0, |p| p.2.min_height() - strip);
-                craft_ui::docking::PanelLimits { min: egui::vec2(220.0, height), ..Default::default() }
+                // CS2's palettes are 212 points wide (measured), narrower than the dock's minimum.
+                let width = if cs2 { 180.0 } else { 220.0 };
+                craft_ui::docking::PanelLimits { min: egui::vec2(width, height), ..Default::default() }
             }
         },
         &mut PanelContent { app, collapsed: &collapsed, fillers: &fillers, card: &card, strip, commands: &mut commands, cs2 },
     );
     if let Some(error) = output.error.take() {
         app.ui.status = error.to_string();
+    }
+    // CS2: a palette that takes a dropped tab comes to the front, so a palette that grew to
+    // take a docked one is not left under its neighbours.
+    if cs2
+        && let Some(panel) = output.focused.clone()
+        && output.actions.iter().any(|a| matches!(a, Action::Move { .. }))
+        && layout.floating.iter().any(|w| w.contains(&panel))
+    {
+        app.ui.docking_reveal = Some(panel);
     }
     #[cfg(not(target_arch = "wasm32"))]
     open_window_drops(app, ui.ctx(), std::mem::take(&mut output.window_files));

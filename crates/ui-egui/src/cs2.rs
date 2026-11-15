@@ -308,6 +308,20 @@ pub fn paint_palette_tabs(painter: &egui::Painter, strip: Rect, body: Color32, t
 
 /// A Vista/7 caption button: 13 x 11, rounded, gradient face.
 fn caption_button(painter: &egui::Painter, r: Rect, close: bool, hovered: bool) {
+    caption_button_glyph(painter, r, if close { Caption::Close } else { Caption::Minimize }, hovered);
+}
+
+/// What a caption button shows.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Caption {
+    Minimize,
+    Maximize,
+    Close,
+}
+
+/// A caption button of `kind` (see [`caption_button`]).
+pub fn caption_button_glyph(painter: &egui::Painter, r: Rect, kind: Caption, hovered: bool) {
+    let close = kind == Caption::Close;
     let (top, bottom, border) = if close {
         (Color32::from_rgb(232, 140, 130), Color32::from_rgb(199, 80, 80), Color32::from_rgb(130, 55, 50))
     } else {
@@ -322,6 +336,10 @@ fn caption_button(painter: &egui::Painter, r: Rect, close: bool, hovered: bool) 
         let s = Stroke::new(1.5, ink);
         painter.line_segment([c + vec2(-2.5, -2.5), c + vec2(2.5, 2.5)], s);
         painter.line_segment([c + vec2(2.5, -2.5), c + vec2(-2.5, 2.5)], s);
+    } else if kind == Caption::Maximize {
+        let b = Rect::from_center_size(c, vec2(7.0, 6.0));
+        painter.rect_stroke(b, 0.0, Stroke::new(1.0, ink), StrokeKind::Inside);
+        painter.rect_filled(Rect::from_min_size(b.min, vec2(b.width(), 2.0)), 0.0, ink);
     } else {
         painter.rect_filled(Rect::from_center_size(c + vec2(0.0, 2.0), vec2(6.0, 2.0)), 0.0, ink);
     }
@@ -717,7 +735,7 @@ mod tests {
             },
             app,
         );
-        crate::PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Classic);
+        crate::PhotocraftApp::setup_context(&h.ctx, crate::theme::ThemeKind::Cs2);
         h.run_steps(3);
         h
     }
