@@ -444,7 +444,7 @@ impl Tokens {
                 radius: 0.0,
                 radius_lg: 0.0,
                 bevel: true,
-                pro: false,
+                pro: true,
                 round_chips: false,
                 tab_strip: Color32::from_rgb(212, 208, 200),
                 row_selected: Color32::from_rgb(10, 36, 106),
