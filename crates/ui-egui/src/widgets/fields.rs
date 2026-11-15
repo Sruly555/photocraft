@@ -132,6 +132,12 @@ pub fn compact_value_field(ui: &mut Ui, value: &mut f32, range: std::ops::RangeI
     value_field_box(ui, value, range, suffix, vec2(width, height), 0.0, FieldOpts::default(), None).0
 }
 
+/// A [`compact_value_field`] with an accessible `name`, for a field whose caption is painted
+/// beside it rather than laid out as a label (the CS2 Color palette's R, G and B).
+pub fn compact_value_field_named(ui: &mut Ui, name: &str, value: &mut f32, range: std::ops::RangeInclusive<f32>, width: f32, height: f32) -> Response {
+    value_field_box(ui, value, range, "", vec2(width, height), 0.0, FieldOpts::default(), Some(name)).0
+}
+
 /// A compact field whose mouse scrub wraps at the native fullscreen viewport's horizontal edges,
 /// and whose typed number applies on Enter or click-away, never on Esc, Tab or Alt: the zoom
 /// fields (see `zoom_field`).

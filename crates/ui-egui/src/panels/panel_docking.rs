@@ -1655,7 +1655,11 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
         if !self.collapsed.contains(id) && ui.available_width() >= PANEL_BODY_MIN_WIDTH {
             let pro = crate::theme::Tokens::get(ui.ctx()).pro;
             ui.spacing_mut().item_spacing.y = if pro { 0.0 } else { 6.0 };
-            egui::Frame::NONE.inner_margin(crate::widgets::body_margin(pro)).show(ui, |ui| body(self.app, ui, id));
+            {
+                // CS2 palettes sit close to their frames (measured on the Color palette).
+                let margin = if self.cs2 { egui::Margin { left: 6, right: 6, top: 7, bottom: 3 } } else { crate::widgets::body_margin(pro) };
+                egui::Frame::NONE.inner_margin(margin).show(ui, |ui| body(self.app, ui, id));
+            }
         }
     }
     fn dock_heights(&self, id: &String) -> Option<DockHeights> {

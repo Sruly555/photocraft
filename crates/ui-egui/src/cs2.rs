@@ -560,6 +560,29 @@ pub fn on_selection(t: &crate::theme::Tokens, selected: bool, normal: Color32) -
     if selected && crate::theme::is_cs2(t) { Color32::WHITE } else { normal }
 }
 
+// ------------------------------------------------------------------------------ work area
+
+/// Where the work area's content starts, right of the floating toolbox when it sits at the
+/// area's left edge (as CS2 opened documents beside the toolbox, so the rulers and the image's
+/// left edge stay visible). A toolbox dragged elsewhere leaves `area` whole.
+pub fn left_of_toolbox(ctx: &egui::Context, area: Rect) -> f32 {
+    ctx.memory(|m| m.area_rect(egui::Id::unique("cs2-toolbox")))
+        .filter(|tb| tb.intersects(area) && tb.left() <= area.left() + 8.0)
+        .map_or(area.left(), |tb| (tb.right() + 3.0).clamp(area.left(), area.right()))
+}
+
+/// Where the work area's content ends, left of the palettes parked against its right edge (the
+/// CS2 default column), so the image, its scroll bars and Fit on Screen are not hidden under
+/// them. `palettes` are the floating palette windows' `[x, y, width, height]`.
+pub fn right_of_palettes(palettes: impl Iterator<Item = [f32; 4]>, area: Rect) -> f32 {
+    palettes
+        .map(|[x, y, w, h]| Rect::from_min_size(pos2(x, y), vec2(w, h)))
+        .filter(|r| r.intersects(area) && r.right() >= area.right() - 8.0)
+        .map(|r| r.left() - 3.0)
+        .fold(area.right(), f32::min)
+        .max(area.left())
+}
+
 // ------------------------------------------------------------------------------ keyboard
 
 thread_local! {
@@ -672,6 +695,15 @@ mod tests {
         assert_eq!(Tool::Note.key(), 'N');
         assert_eq!(Tool::RotateView.key(), '\0');
         set_active(false);
+    }
+
+    #[test]
+    fn the_canvas_stops_short_of_the_palette_column() {
+        let area = Rect::from_min_max(pos2(0.0, 60.0), pos2(1456.0, 790.0));
+        // The default column against the right edge, and one palette dragged into the middle.
+        let column = [[1242.0, 62.0, 212.0, 132.0], [1242.0, 195.0, 212.0, 131.0], [600.0, 300.0, 212.0, 200.0]];
+        assert_eq!(right_of_palettes(column.into_iter(), area), 1239.0);
+        assert_eq!(right_of_palettes(std::iter::empty(), area), 1456.0);
     }
 
     #[test]

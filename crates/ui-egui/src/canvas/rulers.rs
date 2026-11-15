@@ -492,14 +492,21 @@ fn paint(
     let left = Rect::from_min_max(pos2(full.left(), full.top() + RULER), pos2(full.left() + RULER, full.bottom()));
     let corner = Rect::from_min_size(full.min, vec2(RULER, RULER));
     let p = ui.painter_at(full);
-    let bg = t.chrome;
+    // CS2: white rulers with black ticks and figures, edged in the 3D shadow grey.
+    let cs2 = crate::theme::is_cs2(&t);
+    let (bg, edge, ink, label) =
+        if cs2 { (Color32::WHITE, crate::cs2::SHADOW, Color32::BLACK, Color32::BLACK) } else { (t.chrome, t.separator, t.text_faint, t.text_dim) };
     for r in [top, left, corner] {
         p.rect_filled(r, 0.0, bg);
     }
-    p.line_segment([top.left_bottom(), top.right_bottom()], Stroke::new(1.0, t.separator));
-    p.line_segment([left.right_top(), left.right_bottom()], Stroke::new(1.0, t.separator));
+    p.line_segment([top.left_bottom(), top.right_bottom()], Stroke::new(1.0, edge));
+    p.line_segment([left.right_top(), left.right_bottom()], Stroke::new(1.0, edge));
+    if cs2 {
+        p.line_segment([corner.left_bottom(), corner.right_bottom()], Stroke::new(1.0, edge));
+        p.line_segment([corner.right_top(), corner.right_bottom()], Stroke::new(1.0, edge));
+    }
     let font = egui::FontId::proportional(9.0);
-    let tick = Stroke::new(1.0, t.text_faint);
+    let tick = Stroke::new(1.0, ink);
     // Preferences › Units & Rulers: labels in the ruler unit (percent of the document's side).
     let unit = app.session.prefs().units_and_rulers.rulers;
     let whole = unit == Unit::Pixels;
@@ -524,11 +531,11 @@ fn paint(
                 // Labels stacked, as in Photoshop, each character centred in the ruler's width
                 // (a narrow "1" used to hug the left edge while a "0" filled the strip).
                 for (i, ch) in ruler_label(v, step, whole).chars().enumerate() {
-                    p.text(pos2(left.left() + RULER * 0.5, c + 2.0 + i as f32 * 8.5), Align2::CENTER_TOP, ch, font.clone(), t.text_dim);
+                    p.text(pos2(left.left() + RULER * 0.5, c + 2.0 + i as f32 * 8.5), Align2::CENTER_TOP, ch, font.clone(), label);
                 }
             } else {
                 p.line_segment([pos2(c, top.bottom() - RULER), pos2(c, top.bottom())], tick);
-                p.text(pos2(c + 2.0, top.top() + 1.0), Align2::LEFT_TOP, ruler_label(v, step, whole), font.clone(), t.text_dim);
+                p.text(pos2(c + 2.0, top.top() + 1.0), Align2::LEFT_TOP, ruler_label(v, step, whole), font.clone(), label);
             }
             for k in 1..10 {
                 let m = at(v + step * k as f64 / 10.0);

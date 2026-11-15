@@ -106,7 +106,18 @@ fn documents(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         return;
     };
     let main_focused = ui.ctx().input(|i| i.viewport().focused.unwrap_or(true));
-    let rect = ui.available_rect_before_wrap();
+    let mut rect = ui.available_rect_before_wrap();
+    let t = crate::theme::Tokens::get(ui.ctx());
+    if crate::theme::is_cs2(&t) {
+        // The image, its rulers and scroll bars start right of the toolbox, as CS2's document
+        // window opened beside it; the band under the toolbox is bare work area.
+        let left = crate::cs2::left_of_toolbox(ui.ctx(), rect);
+        let palettes = app.ui.docking.iter().flat_map(|w| w.layout.floating.iter().filter(|f| !f.minimized).map(|f| f.rect));
+        let right = crate::cs2::right_of_palettes(palettes, rect).max(left + 120.0).min(rect.right());
+        ui.painter().rect_filled(Rect::from_min_max(rect.min, pos2(left, rect.bottom())), 0.0, t.canvas);
+        ui.painter().rect_filled(Rect::from_min_max(pos2(right, rect.top()), rect.max), 0.0, t.canvas);
+        rect = Rect::from_min_max(pos2(left, rect.top()), pos2(right, rect.bottom()));
+    }
     app.last_canvas_rect = rect;
     app.drop_canvas_rect = Some(rect);
     // Window › Arrange: tiled / n-up layouts show several documents side by side; the active one
@@ -633,14 +644,7 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
     let natural: Vec<f32> = titles.iter().map(|title| ui.painter().layout_no_wrap(title.clone(), font.clone(), t.text).size().x + pad).collect();
     let selected = app.jobs.focus.and_then(|job| opening.iter().position(|(open, _, _)| *open == job)).map_or_else(|| active.unwrap_or(0), |p| tab_count + p);
     // CS2: tabs start right of the floating toolbox where it covers the strip's start.
-    let tabs_left = if cs2 {
-        ui.ctx()
-            .memory(|m| m.area_rect(egui::Id::unique("cs2-toolbox")))
-            .filter(|tb| tb.intersects(strip) && tb.left() <= strip.left() + 8.0)
-            .map_or(strip.left(), |tb| (tb.right() + 3.0).min(strip.right()))
-    } else {
-        strip.left()
-    };
+    let tabs_left = if cs2 { crate::cs2::left_of_toolbox(ui.ctx(), strip) } else { strip.left() };
     let f = fit_doc_tabs(&natural, selected, strip.right() - tabs_left);
     let mut x = tabs_left;
     let mut placed: Vec<(usize, Rect)> = Vec::with_capacity(f.shown.len());

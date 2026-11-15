@@ -31,9 +31,31 @@ const FIELD_W: f32 = 44.0;
 const UNIT_W: f32 = 14.0;
 /// Width of the white and black boxes at the right end of the ramp.
 const BOXES_W: f32 = 16.0;
+/// CS2's Color palette, measured: 19-point rows 4 points apart, 31-point fields, a 16-point ramp.
+const CS2_ROW_H: f32 = 19.0;
+const CS2_ROW_GAP: f32 = 4.0;
+const CS2_FIELD_W: f32 = 31.0;
+const CS2_RAMP_H: f32 = 16.0;
+
+fn row_h(t: &Tokens) -> f32 {
+    if crate::theme::is_cs2(t) { CS2_ROW_H } else { ROW_H }
+}
+
+fn field_w(t: &Tokens) -> f32 {
+    if crate::theme::is_cs2(t) { CS2_FIELD_W } else { FIELD_W }
+}
 
 /// The Color tab: whatever the panel menu picked.
 pub(crate) fn panel(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
+    // CS2 had no Hue Cube: the palette opens on its RGB sliders once per run. A later pick from
+    // the palette menu stands for the rest of the run.
+    let once = egui::Id::unique("cs2-color-sliders-once");
+    if crate::cs2::active() && !ui.data(|d| d.get_temp::<bool>(once).unwrap_or(false)) {
+        ui.data_mut(|d| d.insert_temp(once, true));
+        if app.ui.color_panel.mode == ColorPanelMode::HueCube {
+            app.ui.color_panel.mode = ColorPanelMode::RgbSliders;
+        }
+    }
     match app.ui.color_panel.mode {
         ColorPanelMode::HueCube | ColorPanelMode::BrightnessCube => crate::panels::color_field(app, ui),
         ColorPanelMode::ColorWheel => wheel(app, ui),
@@ -204,22 +226,31 @@ fn slider_rows(ui: &mut egui::Ui, model: Model, v: [f32; 4], background: bool, d
         let Some(&current) = values.get(i) else { continue };
         let mut x = current;
         let mut changed = false;
+        let (row_h, field_w) = (row_h(&t), field_w(&t));
+        let cs2 = crate::theme::is_cs2(&t);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 4.0;
-            ui.set_height(ROW_H);
-            let (lr, _) = ui.allocate_exact_size(vec2(12.0, ROW_H), Sense::hover());
-            ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(12.0), t.text_dim);
-            let track_w = (ui.available_width() - FIELD_W - UNIT_W - 8.0).max(24.0);
-            let (tr, resp) = ui.allocate_exact_size(vec2(track_w, ROW_H), Sense::click_and_drag());
+            ui.set_height(row_h);
+            let (lr, _) = ui.allocate_exact_size(vec2(12.0, row_h), Sense::hover());
+            let label_color = if cs2 { t.text } else { t.text_dim };
+            ui.painter().text(lr.left_center(), egui::Align2::LEFT_CENTER, label, egui::FontId::proportional(12.0), label_color);
+            let track_w = (ui.available_width() - field_w - UNIT_W - 8.0).max(24.0);
+            let (tr, resp) = ui.allocate_exact_size(vec2(track_w, row_h), Sense::click_and_drag());
             let stops = track_stops(model, stops_from, i, 24);
             changed |= track(ui, tr, &resp, &mut x, lo, hi, &stops, model == Model::Web);
             resp.widget_info(|| egui::WidgetInfo::slider(ui.is_enabled(), f64::from(x), label));
             if model == Model::Web {
                 changed |= hex_pair(ui, ui.scope_id().with(("web-field", i, background)), &mut x);
-            } else if widgets::value_field(ui, &mut x, lo..=hi, "", FIELD_W).changed() {
+            } else if (if cs2 {
+                widgets::compact_value_field_named(ui, label, &mut x, lo..=hi, field_w, row_h)
+            } else {
+                widgets::value_field(ui, &mut x, lo..=hi, "", field_w)
+            })
+            .changed()
+            {
                 changed = true;
             }
-            let (ur, _) = ui.allocate_exact_size(vec2(UNIT_W, ROW_H), Sense::hover());
+            let (ur, _) = ui.allocate_exact_size(vec2(UNIT_W, row_h), Sense::hover());
             ui.painter().text(ur.left_center(), egui::Align2::LEFT_CENTER, unit, egui::FontId::proportional(12.0), t.text_faint);
         });
         if changed && let Some(slot) = values.get_mut(i) {
@@ -278,7 +309,9 @@ fn track(ui: &egui::Ui, r: Rect, resp: &egui::Response, value: &mut f32, lo: f32
     let x = bar.left() + bar.width() * f;
     let y = bar.bottom() + 1.0;
     let thumb = vec![pos2(x, y), pos2(x + 5.0, y + 7.0), pos2(x - 5.0, y + 7.0)];
-    ui.painter().add(egui::Shape::convex_polygon(thumb, t.text, Stroke::new(1.0, t.field_border)));
+    // CS2's thumb is a light triangle outlined in black.
+    let (fill, edge) = if crate::theme::is_cs2(&t) { (Color32::WHITE, Color32::BLACK) } else { (t.text, t.field_border) };
+    ui.painter().add(egui::Shape::convex_polygon(thumb, fill, Stroke::new(1.0, edge)));
     changed
 }
 
@@ -286,7 +319,7 @@ fn track(ui: &egui::Ui, r: Rect, resp: &egui::Response, value: &mut f32, lo: f32
 /// and returns true; while focused it shows what is typed, and an invalid entry snaps back.
 fn hex_pair(ui: &mut egui::Ui, id: egui::Id, value: &mut f32) -> bool {
     let t = Tokens::get(ui.ctx());
-    let (rect, _) = ui.allocate_exact_size(vec2(FIELD_W, ROW_H), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(vec2(field_w(&t), row_h(&t)), Sense::hover());
     widgets::surface(ui, rect, t.field, false);
     if !t.bevel {
         ui.painter().rect_stroke(rect, t.radius_sm, Stroke::new(1.0, t.field_border), StrokeKind::Inside);
@@ -323,8 +356,15 @@ fn sliders(app: &mut PhotocraftApp, ui: &mut egui::Ui, mode: ColorPanelMode) {
     let rgb = active(app);
     let v = current_values(ui, model, background, rgb);
     let dynamic = app.session.prefs().interface.dynamic_color_sliders;
-    let rows_h = model.channels().len() as f32 * (ROW_H + ui.spacing().item_spacing.y);
-    let top_h = rows_h.max(CHIPS_W + 40.0);
+    let t = Tokens::get(ui.ctx());
+    let cs2 = crate::theme::is_cs2(&t);
+    if cs2 {
+        ui.spacing_mut().item_spacing.y = CS2_ROW_GAP;
+        // The value fields are as tall as the rows (19 points), not egui's default height.
+        ui.spacing_mut().interact_size.y = CS2_ROW_H;
+    }
+    let rows_h = model.channels().len() as f32 * (row_h(&t) + ui.spacing().item_spacing.y);
+    let top_h = if cs2 { rows_h } else { rows_h.max(CHIPS_W + 40.0) };
     let mut edited = None;
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
@@ -338,6 +378,13 @@ fn sliders(app: &mut PhotocraftApp, ui: &mut egui::Ui, mode: ColorPanelMode) {
     if let Some(v) = edited {
         apply_values(app, ui, model, v);
     }
+    if cs2 {
+        // 6 points from the last row to the ramp, the spacing either side included.
+        ui.add_space(6.0 - 2.0 * CS2_ROW_GAP);
+        // CS2 keeps the ramp one thin strip under the sliders, whatever the palette's height.
+        ramp(app, ui, CS2_RAMP_H);
+        return;
+    }
     ui.add_space(6.0);
     let fill = ui.data(|d| d.get_temp::<f32>(color_field_fill_id()));
     let gaps = 2.0 * ui.spacing().item_spacing.y + 6.0;
@@ -350,7 +397,9 @@ fn sliders(app: &mut PhotocraftApp, ui: &mut egui::Ui, mode: ColorPanelMode) {
 pub(crate) fn alerts(app: &mut PhotocraftApp, ui: &mut egui::Ui, col: Rect, rgb: [f32; 3], web: bool) {
     let t = Tokens::get(ui.ctx());
     let background = app.ui.color_panel.background;
-    let mut y = col.top() + CHIPS_W + 2.0;
+    // CS2's rows leave less room under the chips: its alerts sit closer, above the ramp.
+    let cs2 = crate::theme::is_cs2(&t);
+    let (mut y, step) = if cs2 { (col.top() + 37.0, 14.0) } else { (col.top() + CHIPS_W + 2.0, 18.0) };
     let warnings = [
         (out_of_gamut(rgb), "Out of gamut for printing: click for the nearest printable color", false),
         (if web { not_web_safe(rgb) } else { None }, "Not a web color: click for the nearest web color", true),
@@ -371,7 +420,7 @@ pub(crate) fn alerts(app: &mut PhotocraftApp, ui: &mut egui::Ui, col: Rect, rgb:
         if resp.on_hover_text(tl!(tip)).clicked() {
             set_color(app, ui.ctx(), background, near);
         }
-        y += 18.0;
+        y += step;
     }
 }
 
