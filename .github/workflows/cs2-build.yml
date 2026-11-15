@@ -1,0 +1,55 @@
+# Personal fork build: produces a Windows photocraft.exe as a downloadable artifact.
+# Not for upstream. Mirrors the setup of the windows job in ci.yml.
+name: CS2 Windows build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [cs2-theme]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    env:
+      RUSTC_WRAPPER: ""
+      CARGO_TARGET_DIR: 'D:\t'
+      CRAFT_FONTS_DIR: ${{ github.workspace }}/craft-fonts
+      CRAFT_FONTS_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check out craft-fonts
+        uses: actions/checkout@v4
+        with:
+          repository: storytold/craft-fonts
+          ref: b076417b5880bd4154bd22f00695b1d28c6bea83
+          path: craft-fonts
+          persist-credentials: false
+
+      - name: Check out craft-i18n
+        uses: storytold/craft-common-actions/actions/checkout-craft-i18n@main
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Build
+        run: cargo build --release -p photocraft --locked
+
+      - name: Collect
+        shell: bash
+        run: |
+          mkdir -p out
+          cp 'D:\t\release\photocraft.exe' out/ 2>/dev/null || cp /d/t/release/photocraft.exe out/
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: photocraft-cs2-windows-x64
+          path: out/photocraft.exe
+          if-no-files-found: error
