@@ -735,7 +735,8 @@ mod tests {
         assert!(first.left() >= crate::canvas::rulers::RULER, "{first:?} covers the ruler");
         assert_eq!(h.state().ui.cs2_toolbox, None, "the default place is not saved as a choice");
         // Dragged by its title strip.
-        let grab = first.left_top() + egui::vec2(20.0, 4.0);
+        h.state_mut().ui.tool = crate::state::Tool::RectMarquee;
+        let grab = first.left_top() + egui::vec2(36.0, 4.0);
         h.event(egui::Event::PointerMoved(grab));
         h.step();
         h.event(egui::Event::PointerButton { pos: grab, button: egui::PointerButton::Primary, pressed: true, modifiers: egui::Modifiers::NONE });
@@ -752,6 +753,8 @@ mod tests {
         });
         h.run_steps(3);
         let moved = toolbox_rect(&h);
+        // Moving the toolbox picks no tool.
+        assert_eq!(h.state().ui.tool, crate::state::Tool::RectMarquee, "the drag picked a tool");
         // It follows the pointer (to within egui's drag threshold).
         assert!((moved.min - (first.min + egui::vec2(400.0, 250.0))).length() < 12.0, "{first:?} -> {moved:?}");
         assert_eq!(h.state().ui.cs2_toolbox, Some([moved.min.x, moved.min.y]));
