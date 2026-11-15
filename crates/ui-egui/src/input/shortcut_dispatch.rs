@@ -59,8 +59,11 @@ pub fn bindings(app: &PhotocraftApp) -> Vec<(String, KeyboardShortcut)> {
                 crate::menus::panel_alias(k) == Some(id) && crate::menu_catalog::CATALOG.iter().any(|c| c.3 == k.as_str() && c.2.is_some() && c.2 == sc)
             })
     };
-    let ui = crate::menus::UI_COMMANDS.iter().map(|(id, _, _, sc)| (*id, if aliased(id, *sc) { None } else { prefs.shortcut(id, *sc).map(str::to_string) }));
-    let engine = photocraft_engine::command_specs().iter().map(|c| (c.id, prefs.shortcut(c.id, c.shortcut).map(str::to_string)));
+    let ui = crate::menus::UI_COMMANDS.iter().map(|(id, _, _, sc)| {
+        let sc = crate::cs2::default_key(id, *sc);
+        (*id, if aliased(id, sc) { None } else { prefs.shortcut(id, sc).map(str::to_string) })
+    });
+    let engine = photocraft_engine::command_specs().iter().map(|c| (c.id, prefs.shortcut(c.id, crate::cs2::default_key(c.id, c.shortcut)).map(str::to_string)));
     let own: std::collections::HashSet<&str> = crate::menus::UI_COMMANDS
         .iter()
         .map(|c| c.0)
@@ -69,7 +72,7 @@ pub fn bindings(app: &PhotocraftApp) -> Vec<(String, KeyboardShortcut)> {
     let catalog = crate::menu_catalog::CATALOG
         .iter()
         .filter(|(_, _, sc, id)| sc.is_some() && !own.contains(id) && crate::menus::is_live(id))
-        .map(|&(_, _, sc, id)| (id, prefs.shortcut(id, sc).map(str::to_string)));
+        .map(|&(_, _, sc, id)| (id, prefs.shortcut(id, crate::cs2::default_key(id, sc)).map(str::to_string)));
     let overrides = prefs
         .shortcuts
         .iter()

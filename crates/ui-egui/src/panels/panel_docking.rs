@@ -1668,7 +1668,12 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
         panel_menu(self.app, ui, id);
     }
     fn allow_native(&self, id: &String) -> bool {
-        !self.card.contains(id)
+        // CS2 palettes float inside the application window, never as OS windows.
+        !self.cs2 && !self.card.contains(id)
+    }
+    fn tab_strip_caption(&self) -> f32 {
+        // The palette's title bar: dragging it moves the whole group.
+        if self.cs2 { crate::cs2::PALETTE_CAPTION } else { 0.0 }
     }
     fn group_header_width(&self, _panels: &[String], _active: &String, _floating: bool, _strip_width: f32) -> f32 {
         if self.cs2 { crate::cs2::PALETTE_HEADER } else { 28.0 }
@@ -1686,14 +1691,15 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
     }
     fn paint_tabs(&mut self, ui: &egui::Ui, strip: egui::Rect, tabs: &[craft_ui::docking::TabPaint<'_, String>]) {
         let t = crate::theme::Tokens::get(ui.ctx());
-        let tabs: Vec<_> = tabs.iter().map(|tab| crate::cs2::PaletteTab { rect: tab.rect, galley: tab.galley.clone(), active: tab.active, extra: 0.0 }).collect();
+        let tabs: Vec<_> =
+            tabs.iter().map(|tab| crate::cs2::PaletteTab { rect: tab.rect, galley: tab.galley.clone(), active: tab.active, extra: 0.0 }).collect();
         crate::cs2::paint_palette_tabs(ui.painter(), strip, t.card, &tabs, false);
     }
     fn group_header(&mut self, ui: &mut egui::Ui, panels: &[String], active: &String, floating: bool) {
         let collapsed = panels.iter().all(|id| self.collapsed.contains(id));
         let locked = self.app.session.prefs().workspace_locked;
         let resp = if self.cs2 {
-            let clicks = crate::cs2::palette_header(ui, &tl!("Collapse Panel Group"), &tl!("Close Tab Group"), &tl!("Panel menu"));
+            let clicks = crate::cs2::palette_header(ui, tl!("Collapse Panel Group"), tl!("Close Tab Group"), tl!("Panel menu"));
             if !locked && clicks.minimize {
                 self.commands.push(("window.panel.group", json!({"panel":active,"operation":if collapsed {"expand"} else {"collapse"}})));
             }

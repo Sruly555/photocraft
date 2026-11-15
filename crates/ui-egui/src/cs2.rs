@@ -150,8 +150,10 @@ const ROW_GREY: Color32 = Color32::from_rgb(178, 178, 178);
 const POCKET_SHADOW: Color32 = Color32::from_rgb(151, 151, 151);
 /// The light pocket for the round menu button: a ramp rising from the baseline 30 points from the
 /// right edge to the 4th row 14 points from it (measured).
-const POCKET_BOTTOM: f32 = 30.0;
-const POCKET_TOP: f32 = 14.0;
+const POCKET_BOTTOM: f32 = 29.5;
+const POCKET_TOP: f32 = 16.5;
+/// The soft shadow the shelf casts on the grey row, left of its slope.
+const POCKET_SHADE: f32 = 7.0;
 const POCKET_ROW: f32 = 4.0;
 const INACTIVE_TOP: Color32 = Color32::from_rgb(208, 208, 208);
 const INACTIVE_BOTTOM: Color32 = Color32::from_rgb(169, 169, 169);
@@ -182,13 +184,31 @@ pub fn paint_palette_strip(painter: &egui::Painter, strip: Rect, body: Color32) 
         let x = r - POCKET_BOTTOM + (POCKET_BOTTOM - POCKET_TOP) * t.powf(0.85);
         ramp.push(pos2(x, bottom - (bottom - top) * t));
     }
+    // The shade: darkest against the slope, fading into the row over seven points.
+    let mut shade = egui::Mesh::default();
+    for p in &ramp {
+        shade.colored_vertex(*p + vec2(-POCKET_SHADE, 0.0), ROW_GREY);
+        shade.colored_vertex(*p, POCKET_SHADOW);
+    }
+    for i in 0..steps as u32 {
+        let k = i * 2;
+        shade.add_triangle(k, k + 1, k + 2);
+        shade.add_triangle(k + 1, k + 2, k + 3);
+    }
+    painter.add(shade);
+    // A one-point shadow line above the shelf's flat top.
+    painter.rect_filled(Rect::from_min_max(pos2(r - POCKET_TOP - 4.0, top - 1.0), pos2(r, top)), 0.0, POCKET_SHADOW);
     let mut pocket = ramp.clone();
     pocket.push(pos2(r, top));
     pocket.push(pos2(r, bottom));
     painter.add(egui::Shape::convex_polygon(pocket, body, Stroke::NONE));
-    let mut edge = ramp;
-    edge.push(pos2(r, top));
-    painter.add(egui::Shape::line(edge.iter().map(|p| *p + vec2(-0.5, -0.5)).collect(), Stroke::new(1.0, POCKET_SHADOW)));
+    // White highlight just inside the slope and along the top.
+    let mut edge: Vec<_> = ramp.iter().map(|p| *p + vec2(1.0, 0.0)).collect();
+    edge.push(pos2(r, top + 0.5));
+    if let Some(last) = edge.get_mut(steps) {
+        last.y = top + 0.5;
+    }
+    painter.add(egui::Shape::line(edge, Stroke::new(1.0, Color32::WHITE)));
 }
 
 /// The slope's x at fraction `t` (0 = top, 1 = bottom): near-straight, softened at the top.
@@ -323,28 +343,54 @@ pub fn palette_header(ui: &mut Ui, minimize_tip: &str, close_tip: &str, menu_tip
     let close_r = Rect::from_center_size(pos2(area.right() - 9.0, cap_y), vec2(13.0, 11.0));
     let min_r = close_r.translate(vec2(-15.0, 0.0));
     let mut out = HeaderClicks::default();
-    let m = ui.interact(min_r, ui.id().with("cs2-min"), Sense::click()).on_hover_text(minimize_tip);
+    let m = ui.interact(min_r, ui.scope_id().with("cs2-min"), Sense::click()).on_hover_text(minimize_tip);
     caption_button(ui.painter(), min_r, false, m.hovered());
     out.minimize = m.clicked();
-    let c = ui.interact(close_r, ui.id().with("cs2-close"), Sense::click()).on_hover_text(close_tip);
+    let c = ui.interact(close_r, ui.scope_id().with("cs2-close"), Sense::click()).on_hover_text(close_tip);
     caption_button(ui.painter(), close_r, true, c.hovered());
     out.close = c.clicked();
-    // Round menu button: bevelled disc, black triangle.
-    let row_y = area.bottom() - PALETTE_TAB_ROW / 2.0;
-    let centre = pos2(area.right() - 9.0, row_y);
-    let br = Rect::from_center_size(centre, vec2(14.0, 14.0));
-    let b = ui.interact(br, ui.id().with("cs2-menu"), Sense::click()).on_hover_text(menu_tip);
-    let p = ui.painter();
-    p.circle_filled(centre + vec2(0.5, 0.5), 6.5, SHADOW);
-    p.circle_filled(centre, 6.5, if b.hovered() { Color32::WHITE } else { Color32::from_rgb(244, 244, 244) });
-    p.circle_stroke(centre, 6.5, Stroke::new(1.0, Color32::from_rgb(138, 138, 138)));
-    p.add(egui::Shape::convex_polygon(
-        vec![centre + vec2(-1.5, -3.0), centre + vec2(2.5, 0.0), centre + vec2(-1.5, 3.0)],
-        Color32::BLACK,
-        Stroke::NONE,
-    ));
+    // Round menu button on the shelf: an 11-point disc, lit from the top left, its ring darker
+    // to the bottom right, with a small black arrow.
+    let centre = pos2(area.right() - 6.5, area.bottom() - 5.5);
+    let br = Rect::from_center_size(centre, vec2(13.0, 13.0));
+    let b = ui.interact(br, ui.scope_id().with("cs2-menu"), Sense::click()).on_hover_text(menu_tip);
+    menu_disc(ui.painter(), centre, b.hovered(), b.is_pointer_button_down_on());
     out.menu = Some(b);
     out
+}
+
+/// The palette menu button's disc at `centre`.
+fn menu_disc(p: &egui::Painter, centre: egui::Pos2, hovered: bool, pressed: bool) {
+    const R: f32 = 5.5;
+    const SEGS: usize = 24;
+    let (lit, dim) = match (pressed, hovered) {
+        (true, _) => (Color32::from_gray(200), Color32::from_gray(232)),
+        (false, true) => (Color32::WHITE, Color32::from_gray(228)),
+        (false, false) => (Color32::WHITE, Color32::from_gray(212)),
+    };
+    // Fill: a fan whose vertex colours run from top left (lit) to bottom right (dim).
+    let shade = |v: egui::Vec2| ((v.x + v.y) / (2.0 * R) * 0.5 + 0.5).clamp(0.0, 1.0);
+    let mut fill = egui::Mesh::default();
+    fill.colored_vertex(centre, lerp(lit, dim, 0.5));
+    for i in 0..=SEGS {
+        let a = i as f32 / SEGS as f32 * std::f32::consts::TAU;
+        let v = vec2(a.cos(), a.sin()) * R;
+        fill.colored_vertex(centre + v, lerp(lit, dim, shade(v)));
+    }
+    for i in 1..=SEGS as u32 {
+        fill.add_triangle(0, i, i + 1);
+    }
+    p.add(fill);
+    // Ring: about 154 at the top left, 125 at the bottom right.
+    for i in 0..SEGS {
+        let a0 = i as f32 / SEGS as f32 * std::f32::consts::TAU;
+        let a1 = (i + 1) as f32 / SEGS as f32 * std::f32::consts::TAU;
+        let v0 = vec2(a0.cos(), a0.sin()) * (R - 0.5);
+        let v1 = vec2(a1.cos(), a1.sin()) * (R - 0.5);
+        let c = lerp(Color32::from_gray(154), Color32::from_gray(125), shade(v0 + v1));
+        p.line_segment([centre + v0, centre + v1], Stroke::new(1.0, c));
+    }
+    p.add(egui::Shape::convex_polygon(vec![centre + vec2(-2.5, -2.5), centre + vec2(0.75, 0.0), centre + vec2(-2.5, 2.5)], Color32::BLACK, Stroke::NONE));
 }
 
 // ------------------------------------------------------------------------------ document tabs
@@ -359,7 +405,8 @@ pub const DOC_TAB_PADDING: f32 = PALETTE_TAB_PADDING + DOC_CLOSE_ROOM;
 /// The document strip's background; returns the tab row (its top 16 points).
 pub fn paint_doc_strip(painter: &egui::Painter, strip: Rect, body: Color32) -> Rect {
     let row = Rect::from_min_size(strip.min, vec2(strip.width(), PALETTE_TAB_ROW));
-    painter.rect_filled(Rect::from_min_max(row.min, pos2(row.right(), row.bottom() - 1.0)), 0.0, ROW_GREY);
+    // The empty part of the row is the window's light grey; only the tabs themselves are drawn.
+    painter.rect_filled(Rect::from_min_max(row.min, pos2(row.right(), row.bottom() - 1.0)), 0.0, body);
     let base = row.bottom() - 0.5;
     painter.line_segment([pos2(row.left(), base), pos2(row.right(), base)], Stroke::new(1.0, Color32::WHITE));
     painter.rect_filled(Rect::from_min_max(pos2(strip.left(), row.bottom()), strip.max), 0.0, body);
@@ -505,4 +552,129 @@ pub fn palette_well(ui: &mut Ui, labels: &[&str], browse_tip: &str) -> (Option<u
     // The well's bottom highlight, over the tab baselines.
     p.line_segment([well.left_bottom() + vec2(0.0, -0.5), well.right_bottom() + vec2(0.0, -0.5)], Stroke::new(1.0, HIGHLIGHT));
     (clicked, b.clicked())
+}
+
+/// Text on a selected list row: white on the Vista selection blue, as in CS2's palettes, so a
+/// highlighted layer, channel or history state stays readable.
+pub fn on_selection(t: &crate::theme::Tokens, selected: bool, normal: Color32) -> Color32 {
+    if selected && crate::theme::is_cs2(t) { Color32::WHITE } else { normal }
+}
+
+// ------------------------------------------------------------------------------ keyboard
+
+thread_local! {
+    /// Whether the CS2 theme is showing, for code with no `egui::Context` at hand (the default
+    /// shortcuts and tool letters). Set once per frame from the theme, on the UI thread; per
+    /// thread so that tests running side by side don't see each other's theme.
+    static ACTIVE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn set_active(on: bool) {
+    ACTIVE.with(|a| a.set(on));
+}
+
+pub fn active() -> bool {
+    ACTIVE.with(std::cell::Cell::get)
+}
+
+/// Photoshop CS2's default keys where they differ from the modern defaults: (command, key, or
+/// `""` for none). Ctrl+Z toggles Undo/Redo and Ctrl+Alt+Z steps back; channels are Ctrl+~ and
+/// Ctrl+1…; Actual Pixels is Ctrl+Alt+0; Feather is Ctrl+Alt+D; Paste Into is Shift+Ctrl+V.
+/// Commands CS2 did not have lose their modern keys.
+pub const SHORTCUTS: &[(&str, &str)] = &[
+    ("edit.toggleLastState", "Cmd+Z"),
+    ("edit.undo", "Cmd+Alt+Z"),
+    ("edit.redo", "Cmd+Shift+Z"),
+    ("select.modify.feather", "Cmd+Alt+D"),
+    ("view.actualPixels", "Cmd+Alt+0"),
+    ("channel.target.composite", "Cmd+`"),
+    ("select.loadLuminosity", "Cmd+Alt+`"),
+    ("channel.target.slot3", "Cmd+1"),
+    ("channel.target.slot4", "Cmd+2"),
+    ("channel.target.slot5", "Cmd+3"),
+    ("channel.target.slot6", "Cmd+4"),
+    ("channel.target.slot7", "Cmd+5"),
+    ("channel.target.slot8", "Cmd+6"),
+    ("channel.target.slot9", "Cmd+7"),
+    ("edit.pasteSpecial.pasteInto", "Cmd+Shift+V"),
+    ("edit.pasteSpecial.pasteInPlace", ""),
+    ("select.selectAndMask", ""),
+    ("filter.adaptiveWideAngle", ""),
+    ("filter.cameraRaw", ""),
+    ("filter.lensCorrection", ""),
+    ("edit.contentAwareScale", ""),
+    ("image.adjustments.blackWhite", ""),
+];
+
+/// A command's default key: CS2's while the CS2 theme shows, else `default`.
+pub fn default_key<'a>(id: &str, default: Option<&'a str>) -> Option<&'a str> {
+    if !active() {
+        return default;
+    }
+    match SHORTCUTS.iter().find(|(c, _)| *c == id) {
+        Some((_, "")) => None,
+        Some((_, sc)) => Some(sc),
+        None => default,
+    }
+}
+
+/// A tool's CS2 letter where it differs from the modern one (`'\0'` = none): R is the Blur
+/// group, N the Notes tool, K the Slice tools; tools CS2 did not have get no letter.
+pub fn tool_key(tool: crate::state::Tool, modern: char) -> char {
+    use crate::state::Tool as T;
+    if !active() {
+        return modern;
+    }
+    match tool {
+        T::Blur | T::Sharpen | T::Smudge => 'R',
+        T::Note => 'N',
+        T::Slice | T::SliceSelect => 'K',
+        T::RotateView
+        | T::Count
+        | T::Frame
+        | T::Artboard
+        | T::Remove
+        | T::ContentAwareMove
+        | T::QuickSelection
+        | T::ObjectSelection
+        | T::MixerBrush
+        | T::PerspectiveCrop
+        | T::CurvaturePen
+        | T::Triangle
+        | T::Star => '\0',
+        _ => modern,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::Tool;
+
+    #[test]
+    fn cs2_keys_apply_only_under_the_cs2_theme() {
+        set_active(false);
+        assert_eq!(crate::shortcuts::default_shortcut("edit.undo").as_deref(), Some("Cmd+Z"));
+        assert_eq!(Tool::Blur.key(), '\0');
+        set_active(true);
+        // Ctrl+Z toggles Undo/Redo; Ctrl+Alt+Z steps back; Ctrl+Shift+Z steps forward.
+        assert_eq!(crate::shortcuts::default_shortcut("edit.toggleLastState").as_deref(), Some("Cmd+Z"));
+        assert_eq!(crate::shortcuts::default_shortcut("edit.undo").as_deref(), Some("Cmd+Alt+Z"));
+        assert_eq!(crate::shortcuts::default_shortcut("edit.redo").as_deref(), Some("Cmd+Shift+Z"));
+        assert_eq!(crate::shortcuts::default_shortcut("select.modify.feather").as_deref(), Some("Cmd+Alt+D"));
+        assert_eq!(crate::shortcuts::default_shortcut("channel.target.slot3").as_deref(), Some("Cmd+1"));
+        assert_eq!(crate::shortcuts::default_shortcut("edit.pasteSpecial.pasteInPlace"), None);
+        assert_eq!(Tool::Blur.key(), 'R');
+        assert_eq!(Tool::Note.key(), 'N');
+        assert_eq!(Tool::RotateView.key(), '\0');
+        set_active(false);
+    }
+
+    #[test]
+    fn every_cs2_key_names_a_real_command() {
+        for (id, _) in SHORTCUTS {
+            set_active(false);
+            assert!(crate::shortcuts::default_shortcut(id).is_some(), "{id} has no modern default to replace");
+        }
+    }
 }

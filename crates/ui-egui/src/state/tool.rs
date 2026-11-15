@@ -265,6 +265,10 @@ impl Tool {
     }
     /// Photoshop default single-key shortcut (`'\0'` = none, e.g. the Blur group).
     pub fn key(self) -> char {
+        crate::cs2::tool_key(self, self.modern_key())
+    }
+    /// The modern Photoshop letter, before the CS2 table.
+    fn modern_key(self) -> char {
         match self {
             Tool::Move | Tool::Artboard => 'V',
             Tool::RectMarquee | Tool::EllipseMarquee => 'M',

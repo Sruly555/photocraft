@@ -87,7 +87,7 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 egui::Panel::right("cs2-palette-well").resizable(false).exact_size(crate::cs2::WELL_AREA).frame(egui::Frame::NONE).show(ui, |ui| {
                     let labels = [tl!("Brushes"), tl!("Tool Presets"), tl!("Layer Comps")];
                     let labels: Vec<&str> = labels.iter().map(|l| l.as_ref()).collect();
-                    let (tab, browse) = crate::cs2::palette_well(ui, &labels, &tl!("Open"));
+                    let (tab, browse) = crate::cs2::palette_well(ui, &labels, tl!("Open"));
                     let command = match tab {
                         Some(0) => Some(("window.toggle.brushes", json!({}))),
                         Some(1) => Some(("window.panel.toolPresets", json!({}))),

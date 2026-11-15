@@ -466,7 +466,7 @@ fn paint_target_brackets(app: &PhotocraftApp, painter: &egui::Painter, t: &Token
 /// The layer name (and the kind sub-label of non-pixel rows); returns the name's rect.
 fn paint_row_name(painter: &egui::Painter, t: &Tokens, rc: &RowCtx<'_>, x: f32, name_right: f32) -> Option<Rect> {
     let (l, doc, rect, ts, selected) = (rc.l, rc.doc, rc.rect, rc.ts, rc.row.selected);
-    let name_color = if l.visible { t.text } else { t.text_faint };
+    let name_color = crate::cs2::on_selection(t, selected, if l.visible { t.text } else { t.text_faint });
     let size = if t.pro { 12.0 } else { 13.0 };
     let font = if l.artboard().is_some() {
         // Artboards are named in bold, as in Photoshop.

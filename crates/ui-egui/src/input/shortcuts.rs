@@ -108,7 +108,7 @@ pub fn effective_alternates(app: &PhotocraftApp, id: &str) -> Vec<String> {
 
 /// Default (unmodified) shortcut of a command id.
 pub fn default_shortcut(id: &str) -> Option<String> {
-    crate::menus::UI_COMMANDS
+    let modern = crate::menus::UI_COMMANDS
         .iter()
         .find(|c| c.0 == id)
         .and_then(|c| c.3)
@@ -116,7 +116,12 @@ pub fn default_shortcut(id: &str) -> Option<String> {
         .or_else(|| crate::menu_catalog::CATALOG.iter().find(|c| c.3 == id).and_then(|c| c.2))
         .or_else(|| photocraft_engine::prefs::TEMPORARY_TOOLS.iter().find(|t| t.0 == id).map(|t| t.2))
         .map(str::to_string)
-        .or_else(|| crate::tool_shortcuts::tool(id).and_then(crate::tool_shortcuts::default))
+        .or_else(|| crate::tool_shortcuts::tool(id).and_then(crate::tool_shortcuts::default));
+    // Under the CS2 theme its own defaults stand in (Ctrl+Z toggles Undo/Redo…).
+    match crate::cs2::default_key(id, Some("")) {
+        Some("") => modern,
+        cs2 => cs2.map(str::to_string),
+    }
 }
 
 /// With ⇧ held the OS reports the shifted character as the logical key (US layout): ⇧; is `:`.

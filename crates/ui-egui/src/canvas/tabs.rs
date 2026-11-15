@@ -583,6 +583,8 @@ fn studio_tab_name(app: &PhotocraftApp, st: &photocraft_engine::DocState) -> Str
 /// Photoshop document tabs: "name @ 33.3% (RGB/8)" on a dark strip; active tab matches panels.
 /// Tabs keep their whole titles, and the ones that don't fit move into a » menu at the end of the
 /// strip; the active document's tab always stays on the strip (#1276, #4487).
+// The CS2 branch (painted tabs, toolbox offset) lives inline beside the stock one.
+#[allow(clippy::cognitive_complexity)]
 fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
     let t = crate::theme::Tokens::get(ui.ctx());
     let documents = docked_document_indices(app);
@@ -633,7 +635,7 @@ fn pro_tabs(app: &mut PhotocraftApp, ui: &mut egui::Ui) -> TabStrip {
     // CS2: tabs start right of the floating toolbox where it covers the strip's start.
     let tabs_left = if cs2 {
         ui.ctx()
-            .memory(|m| m.area_rect(egui::Id::new("cs2-toolbox")))
+            .memory(|m| m.area_rect(egui::Id::unique("cs2-toolbox")))
             .filter(|tb| tb.intersects(strip) && tb.left() <= strip.left() + 8.0)
             .map_or(strip.left(), |tb| (tb.right() + 3.0).min(strip.right()))
     } else {
@@ -877,6 +879,9 @@ pub(super) fn open_on_double_click(app: &mut PhotocraftApp, ui: &egui::Ui, area:
 
 /// Extra OS windows showing documents (multi-window / multi-monitor).
 pub fn extra_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
+    if crate::theme::is_cs2(&crate::theme::Tokens::get(ctx)) {
+        return cs2_document_windows(app, ctx);
+    }
     let wins = app.ui.windows.clone();
     for w in wins.into_iter().filter(|w| w.open) {
         let Some(st) = app.session.documents().get(w.document) else { continue };
@@ -917,6 +922,59 @@ pub fn extra_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
             win.view = view;
             win.focused = focused;
             if close {
+                win.open = false;
+            }
+        }
+    }
+    app.ui.windows.retain(|w| w.open);
+}
+
+/// CS2 document windows: floating inside the application window, as Photoshop's were, rather
+/// than as OS windows that would each add a taskbar button.
+fn cs2_document_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
+    let wins = app.ui.windows.clone();
+    let work = ctx.content_rect();
+    for w in wins.into_iter().filter(|w| w.open) {
+        let Some(st) = app.session.documents().get(w.document) else { continue };
+        let title = titled_name(st);
+        let owned = w.floating.then(|| app.ui.views.get(w.document).cloned()).flatten();
+        let shares = owned.is_some();
+        let mut view = owned.unwrap_or_else(|| app.ui.windows.iter().find(|x| x.id == w.id).map_or_else(|| w.view.clone(), |x| x.view.clone()));
+        let mut open = true;
+        let focused = app.session.active_index() == Some(w.document);
+        let mut window = egui::Window::new(title)
+            .id(egui::Id::unique(("cs2-docwin", w.id)))
+            .default_size([640.0, 480.0])
+            .min_size([160.0, 120.0])
+            .constrain_to(work)
+            .collapsible(false)
+            .resizable(true)
+            .open(&mut open)
+            .frame(egui::Frame::window(&ctx.global_style()).inner_margin(0.0).corner_radius(0.0));
+        if let Some([x, y]) = w.position {
+            // A tab torn off at a screen position lands there, kept inside the main window.
+            window = window.default_pos([x.clamp(work.left(), work.right() - 160.0), y.clamp(work.top(), work.bottom() - 120.0)]);
+        }
+        let shown = window.show(ctx, |ui| {
+            let rect = ui.available_rect_before_wrap();
+            app.drawing_window = Some(w.id);
+            view = canvas_view(app, ui, w.document, rect, view.clone(), focused);
+            app.drawing_window = None;
+            ui.allocate_rect(rect, Sense::hover());
+        });
+        if let Some(r) = shown
+            && !focused
+            && ctx.input(|i| i.pointer.any_pressed() && i.pointer.interact_pos().is_some_and(|p| r.response.rect.contains(p)))
+        {
+            app.session.set_active(w.document);
+        }
+        if shares && let Some(v) = app.ui.views.get_mut(w.document) {
+            *v = view.clone();
+        }
+        if let Some(win) = app.ui.windows.iter_mut().find(|x| x.id == w.id) {
+            win.view = view;
+            win.focused = focused;
+            if !open {
                 win.open = false;
             }
         }

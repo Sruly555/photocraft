@@ -323,6 +323,7 @@ impl PhotocraftApp {
         // craft-ui records the areas on the press, and swapping the shape cancels the drag.
         // CS2: the toolbox and palettes float over the work area, as CS2's did.
         let cs2 = crate::theme::is_cs2(&theme::Tokens::get(&ctx));
+        crate::cs2::set_active(cs2);
         let dock_edge_layout = !cs2 && toolbar_shown && docking && toolbar_at_dock_edge && crate::panel_docking::canvas_alone(self);
         if cs2 && docking {
             let work = ui.available_rect_before_wrap();

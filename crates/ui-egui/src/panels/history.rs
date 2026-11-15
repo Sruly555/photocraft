@@ -63,13 +63,13 @@ pub(super) fn history(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 ui.painter().rect_filled(rect, 0.0, t.hover.gamma_multiply(0.5));
             }
             let icon = step_icon(&e);
-            let color = if is_redo { t.text_faint } else { t.text };
+            let color = crate::cs2::on_selection(&t, selected, if is_redo { t.text_faint } else { t.text });
             icons::paint(
                 ui,
                 Rect::from_center_size(pos2(rect.left() + 42.0, rect.center().y), vec2(16.0, 16.0)),
                 icon,
                 12.0,
-                if is_redo { t.text_faint } else { t.icon },
+                crate::cs2::on_selection(&t, selected, if is_redo { t.text_faint } else { t.icon }),
             );
             ui.painter().text(pos2(rect.left() + 58.0, rect.center().y), Align2::LEFT_CENTER, &e, egui::FontId::proportional(12.0), color);
             if history_source_column(ui, rect, egui::Id::unique(("history-source", i)), source == Some(HistorySource::State(i))) {

@@ -414,10 +414,11 @@ pub fn show(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                 Row::Composite | Row::Color(_) | Row::QuickMask => tl!(&name).to_owned(),
                 Row::Alpha(_) | Row::LayerMask => name.clone(),
             };
-            job.append(&label, 0.0, egui::TextFormat { font_id: font, color: t.text, italics: italic, ..Default::default() });
+            let text = crate::cs2::on_selection(&t, selected, t.text);
+            job.append(&label, 0.0, egui::TextFormat { font_id: font, color: text, italics: italic, ..Default::default() });
             let galley = painter.layout_job(job);
             let text_pos = pos2(cell.right() + 10.0, rect.center().y - galley.size().y / 2.0);
-            painter.galley(text_pos, galley, t.text);
+            painter.galley(text_pos, galley, text);
             if let Some(slot) = slot {
                 painter.text(
                     pos2(rect.right() - 8.0, rect.center().y),

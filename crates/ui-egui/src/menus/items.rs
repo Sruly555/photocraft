@@ -82,7 +82,7 @@ pub fn menu_items(app: &PhotocraftApp) -> Vec<MenuItem> {
             id: c.id.into(),
             label: c.label.into(),
             path: c.menu.iter().map(|s| s.to_string()).collect(),
-            shortcut: c.shortcut.map(Into::into),
+            shortcut: crate::cs2::default_key(c.id, c.shortcut).map(Into::into),
             enabled: is_enabled(app, c.id),
             checked: None,
             color: None,
