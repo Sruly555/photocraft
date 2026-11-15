@@ -562,12 +562,12 @@ pub fn on_selection(t: &crate::theme::Tokens, selected: bool, normal: Color32) -
 
 // ------------------------------------------------------------------------------ work area
 
-/// Where the work area's content starts, right of the floating toolbox when it sits at the
-/// area's left edge (as CS2 opened documents beside the toolbox, so the rulers and the image's
-/// left edge stay visible). A toolbox dragged elsewhere leaves `area` whole.
+/// Where the document tabs start: right of the floating toolbox while it sits at the work
+/// area's left edge, so it never covers a tab. A toolbox dragged elsewhere leaves `area` whole.
 pub fn left_of_toolbox(ctx: &egui::Context, area: Rect) -> f32 {
     ctx.memory(|m| m.area_rect(egui::Id::unique("cs2-toolbox")))
-        .filter(|tb| tb.intersects(area) && tb.left() <= area.left() + 8.0)
+        // Its default spot is just right of the vertical ruler.
+        .filter(|tb| tb.intersects(area) && tb.left() <= area.left() + crate::canvas::rulers::RULER + 12.0)
         .map_or(area.left(), |tb| (tb.right() + 3.0).clamp(area.left(), area.right()))
 }
 

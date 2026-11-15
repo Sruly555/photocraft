@@ -109,12 +109,12 @@ fn documents(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
     let mut rect = ui.available_rect_before_wrap();
     let t = crate::theme::Tokens::get(ui.ctx());
     if crate::theme::is_cs2(&t) {
-        // The image, its rulers and scroll bars start right of the toolbox, as CS2's document
-        // window opened beside it; the band under the toolbox is bare work area.
-        let left = crate::cs2::left_of_toolbox(ui.ctx(), rect);
+        // The canvas and its vertical ruler start at the work area's left edge, as in CS2: the
+        // toolbox floats just right of the ruler (`toolbar::floating_toolbox`). On the right
+        // the canvas stops short of the palette column, so its scroll bar stays visible.
+        let left = rect.left();
         let palettes = app.ui.docking.iter().flat_map(|w| w.layout.floating.iter().filter(|f| !f.minimized).map(|f| f.rect));
         let right = crate::cs2::right_of_palettes(palettes, rect).max(left + 120.0).min(rect.right());
-        ui.painter().rect_filled(Rect::from_min_max(rect.min, pos2(left, rect.bottom())), 0.0, t.canvas);
         ui.painter().rect_filled(Rect::from_min_max(pos2(right, rect.top()), rect.max), 0.0, t.canvas);
         rect = Rect::from_min_max(pos2(left, rect.top()), pos2(right, rect.bottom()));
     }
