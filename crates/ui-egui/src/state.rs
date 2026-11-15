@@ -532,6 +532,10 @@ pub struct UiState {
     /// panel layout so it comes back there at the next launch.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cs2_toolbox: Option<[f32; 2]>,
+    /// The palettes in the CS2 theme's palette well, in order (`None`: CS2's default three), kept
+    /// with the panel layout. See `cs2_well`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cs2_well: Option<Vec<String>>,
     /// One-frame focus/raise request from an explicit panel reveal.
     #[serde(skip)]
     pub docking_reveal: Option<String>,
@@ -710,6 +714,7 @@ impl Default for UiState {
             docking_generation: 0,
             docking_collapsed: Vec::new(),
             cs2_toolbox: None,
+            cs2_well: None,
             docking_reveal: None,
             color_panel: Default::default(),
             color_panel_synced: None,

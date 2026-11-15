@@ -28,6 +28,7 @@ mod brush_mode_menu;
 pub mod canvas;
 pub mod control;
 pub mod cs2;
+pub mod cs2_well;
 pub mod dialogs;
 pub mod dock;
 pub(crate) mod edit_session;

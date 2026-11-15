@@ -343,6 +343,9 @@ pub(crate) fn snapshot(app: &PhotocraftApp) -> Value {
     if let (Some(pos), Some(layout)) = (app.ui.cs2_toolbox, layout.as_object_mut()) {
         layout.insert("cs2Toolbox".into(), json!(pos));
     }
+    if let (Some(well), Some(layout)) = (&app.ui.cs2_well, layout.as_object_mut()) {
+        layout.insert("cs2Well".into(), json!(well));
+    }
     keep_newer(app, &mut layout);
     layout
 }
@@ -530,6 +533,10 @@ pub fn apply(app: &mut PhotocraftApp, v: &Value) {
     // The CS2 toolbox's place; a finite pair only, so a hand-edited file can't lose it.
     if let Some(pos) = v.get("cs2Toolbox").and_then(|p| serde_json::from_value::<[f32; 2]>(p.clone()).ok()).filter(|p| p.iter().all(|c| c.is_finite())) {
         app.ui.cs2_toolbox = Some(pos);
+    }
+    // The CS2 palette well's palettes (a bounded list of names; unknown ones are skipped there).
+    if let Some(well) = v.get("cs2Well").and_then(|w| serde_json::from_value::<Vec<String>>(w.clone()).ok()) {
+        app.ui.cs2_well = Some(well.into_iter().take(64).collect());
     }
     if let Some(d) = v.get("dock").and_then(|d| serde_json::from_value(d.clone()).ok()) {
         app.ui.dock = d;

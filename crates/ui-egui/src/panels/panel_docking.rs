@@ -1220,6 +1220,16 @@ fn fillers(layout: &Layout<String>) -> std::collections::HashSet<String> {
     out
 }
 
+/// The label of dock panel `id` (English, untranslated), if it is one.
+pub(crate) fn panel_label(id: &str) -> Option<&'static str> {
+    PANELS.iter().find(|p| p.0 == id).map(|p| p.1)
+}
+
+/// Draw dock panel `id`'s body into `ui`, outside the dock (the CS2 palette well's drop-down).
+pub(crate) fn panel_body(app: &mut PhotocraftApp, ui: &mut egui::Ui, id: &str) {
+    body(app, ui, id);
+}
+
 fn body(app: &mut PhotocraftApp, ui: &mut egui::Ui, id: &str) {
     let Some((_, label, group)) = PANELS.iter().find(|p| p.0 == id) else { return };
     let pro = crate::theme::Tokens::get(ui.ctx()).pro;
@@ -1694,7 +1704,34 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
         Some(DockHeights::new(body(group.default_height())).compact(body(group.compact_height())).fill(fill))
     }
     fn panel_menu(&mut self, ui: &mut egui::Ui, id: &String) {
+        if self.cs2 {
+            // Every CS2 palette menu starts with Dock to Palette Well.
+            if ui.button(tl!("Dock to Palette Well")).clicked() {
+                crate::cs2_well::dock(self.app, id);
+                ui.close();
+            }
+            ui.separator();
+        }
         panel_menu(self.app, ui, id);
+    }
+    fn resolve_drag(
+        &mut self,
+        ctx: &egui::Context,
+        _style: &craft_ui::docking::DockStyle,
+        request: &craft_ui::docking::DropRequest<'_, String>,
+    ) -> Option<craft_ui::docking::DropFeedback> {
+        // CS2: a palette's tab dropped on the palette well goes into it (a whole group does not).
+        if !self.cs2 || request.whole_group {
+            return None;
+        }
+        let well = crate::cs2_well::well_rect(ctx)?;
+        if !well.expand(4.0).contains(request.pointer) {
+            return None;
+        }
+        if request.released {
+            crate::cs2_well::dock(self.app, request.panel);
+        }
+        Some(craft_ui::docking::DropFeedback { preview: Some(well), insertion: None })
     }
     fn allow_native(&self, id: &String) -> bool {
         // CS2 palettes float inside the application window, never as OS windows.

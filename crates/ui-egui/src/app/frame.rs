@@ -331,6 +331,8 @@ impl PhotocraftApp {
             if toolbar_shown {
                 panels::toolbar::floating_toolbox(self, &ctx, work);
             }
+            // A palette dropped down from the palette well, over everything.
+            crate::cs2_well::dropdown(self, &ctx);
         } else if dock_edge_layout {
             // Dock outermost, then its rail, then the toolbox, then the canvas: the toolbox sits
             // between the canvas and the dock, not outside the dock at the window edge.

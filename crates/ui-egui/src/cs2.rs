@@ -495,7 +495,8 @@ pub const TOOLBOX_HEIGHT: f32 = CAPTION_HEIGHT + 23.0 + 71.0 + 93.0 + 49.0 + 49.
 /// with palette tabs standing on its bottom edge.
 pub const WELL_SIZE: egui::Vec2 = egui::Vec2::new(166.0, 23.0);
 const WELL_GREY: Color32 = Color32::from_rgb(178, 178, 178);
-/// The options-bar room for the separator, the Go to Bridge button, a separator and the well.
+/// The options-bar room for the separator, the Go to Bridge button, a separator and the well at
+/// its narrowest.
 pub const WELL_AREA: f32 = 9.0 + 26.0 + 9.0 + WELL_SIZE.x + 6.0;
 
 /// A small folder under a magnifier: CS2's "Go to Bridge" button position, drawn original.
@@ -511,9 +512,25 @@ fn browse_glyph(p: &egui::Painter, c: egui::Pos2) {
     p.line_segment([lens + vec2(2.5, 2.5), lens + vec2(5.5, 5.5)], Stroke::new(2.0, Color32::from_gray(40)));
 }
 
-/// Draws the well's group into `ui` (right-aligned room of [`WELL_AREA`]); returns the tab
-/// clicked, if any, and whether the browse button was.
-pub fn palette_well(ui: &mut Ui, labels: &[&str], browse_tip: &str) -> (Option<usize>, bool) {
+/// A tab of the palette well, as drawn this frame.
+pub struct WellTab {
+    pub rect: Rect,
+    pub response: Response,
+}
+
+/// What [`palette_well`] drew.
+pub struct WellDrawn {
+    /// The sunken well.
+    pub well: Rect,
+    pub tabs: Vec<WellTab>,
+    /// The browse button was clicked.
+    pub browse: bool,
+}
+
+/// Draws the well's group into `ui.max_rect()`: a separator, the browse button, a separator and
+/// the well, which takes the rest of the width (CS2's well runs to the options bar's end). The
+/// tabs stand on the well's floor, `active` (a palette dropped down from it) drawn in front.
+pub fn palette_well(ui: &mut Ui, labels: &[&str], active: Option<usize>, browse_tip: &str) -> WellDrawn {
     let area = ui.max_rect();
     let p = ui.painter().clone();
     let cy = area.center().y;
@@ -531,13 +548,14 @@ pub fn palette_well(ui: &mut Ui, labels: &[&str], browse_tip: &str) -> (Option<u
     sep(x);
     x += 9.0;
     // The sunken well: shadow top and left, highlight bottom and right.
-    let well = Rect::from_min_size(pos2(x, (cy - WELL_SIZE.y / 2.0).round()), WELL_SIZE);
+    let width = (area.right() - 4.0 - x).max(WELL_SIZE.x);
+    let well = Rect::from_min_size(pos2(x, (cy - WELL_SIZE.y / 2.0).round()), vec2(width, WELL_SIZE.y));
     p.rect_filled(well, 0.0, WELL_GREY);
     p.line_segment([well.left_top() + vec2(0.5, 0.5), well.right_top() + vec2(-0.5, 0.5)], Stroke::new(1.0, SHADOW));
     p.line_segment([well.left_top() + vec2(0.5, 0.5), well.left_bottom() + vec2(0.5, -0.5)], Stroke::new(1.0, SHADOW));
     p.line_segment([well.right_top() + vec2(-0.5, 0.5), well.right_bottom() + vec2(-0.5, -0.5)], Stroke::new(1.0, HIGHLIGHT));
-    // Tabs on the well's floor: the widest fit first; earlier tabs give up room when it is short
-    // (CS2 cut their labels without an ellipsis).
+    // Tabs on the well's floor at their natural widths; when they don't fit, the earlier tabs
+    // give up room (CS2 cut their labels without an ellipsis).
     let row = Rect::from_min_max(pos2(well.left() - 1.0, well.bottom() - PALETTE_TAB_ROW), pos2(well.right() - 1.0, well.bottom()));
     let font = egui::FontId::proportional(PALETTE_FONT);
     let natural: Vec<f32> = labels.iter().map(|l| p.layout_no_wrap((*l).to_owned(), font.clone(), INACTIVE_TEXT).size().x + PALETTE_TAB_PADDING).collect();
@@ -552,24 +570,24 @@ pub fn palette_well(ui: &mut Ui, labels: &[&str], browse_tip: &str) -> (Option<u
         natural.iter().enumerate().map(|(i, w)| if i + 1 == natural.len() { *w } else { w.min(share) }).collect()
     };
     let mut tabs = Vec::new();
-    let mut clicked = None;
+    let mut drawn = Vec::new();
     let mut tx = row.left();
     for (i, (label, w)) in labels.iter().zip(&widths).enumerate() {
         let rect = Rect::from_min_size(pos2(tx, row.top()), vec2(*w, row.height()));
-        let mut job = egui::text::LayoutJob::simple_singleline((*label).to_owned(), font.clone(), INACTIVE_TEXT);
+        let selected = active == Some(i);
+        let mut job = egui::text::LayoutJob::simple_singleline((*label).to_owned(), font.clone(), if selected { Color32::BLACK } else { INACTIVE_TEXT });
         // A cut label runs up to the next tab's edge (CS2 clips it there, without an ellipsis).
         job.wrap = egui::text::TextWrapping { max_width: (w - TAB_INSET).max(4.0), max_rows: 1, break_anywhere: true, overflow_character: None };
         let galley = ui.fonts_mut(|f| f.layout_job(job));
-        if ui.interact(rect, ui.scope_id().with(("cs2-well", i)), Sense::click()).on_hover_text(*label).clicked() {
-            clicked = Some(i);
-        }
-        tabs.push(PaletteTab { rect, galley, active: false, extra: 0.0 });
+        let response = ui.interact(rect, ui.scope_id().with(("cs2-well", i)), Sense::click_and_drag()).on_hover_text(*label);
+        tabs.push(PaletteTab { rect, galley, active: selected, extra: 0.0 });
+        drawn.push(WellTab { rect, response });
         tx += w;
     }
     paint_palette_tabs(&p, row, WELL_GREY, &tabs, true);
     // The well's bottom highlight, over the tab baselines.
     p.line_segment([well.left_bottom() + vec2(0.0, -0.5), well.right_bottom() + vec2(0.0, -0.5)], Stroke::new(1.0, HIGHLIGHT));
-    (clicked, b.clicked())
+    WellDrawn { well, tabs: drawn, browse: b.clicked() }
 }
 
 /// Text on a selected list row: white on the Vista selection blue, as in CS2's palettes, so a

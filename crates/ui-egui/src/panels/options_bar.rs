@@ -83,20 +83,14 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
         .frame(egui::Frame::NONE.fill(t.chrome).inner_margin(egui::Margin::symmetric(10, 0)))
         .show(ui, |ui| {
             if crate::theme::is_cs2(&t) {
-                // CS2's palette well at the bar's right end: Brushes, Tool Presets, Layer Comps.
-                egui::Panel::right("cs2-palette-well").resizable(false).exact_size(crate::cs2::WELL_AREA).frame(egui::Frame::NONE).show(ui, |ui| {
-                    let labels = [tl!("Brushes"), tl!("Tool Presets"), tl!("Layer Comps")];
-                    let labels: Vec<&str> = labels.iter().map(|l| l.as_ref()).collect();
-                    let (tab, browse) = crate::cs2::palette_well(ui, &labels, tl!("Open"));
-                    let command = match tab {
-                        Some(0) => Some(("window.toggle.brushes", json!({}))),
-                        Some(1) => Some(("window.panel.toolPresets", json!({}))),
-                        Some(2) => Some(("window.panel.activate", json!({"panel": "layerComps"}))),
-                        _ => None,
-                    };
-                    let command = if browse { Some(("file.open", json!({}))) } else { command };
-                    if let Some((id, params)) = command
-                        && let Err(e) = crate::menus::invoke(app, ui.ctx(), id, params)
+                // CS2's palette well: from 840 points in (or after the tool options, if they run
+                // further) to the bar's end, as CS2's filled the bar at every window width.
+                let content = ui.ctx().data(|d| d.get_temp::<f32>(egui::Id::unique("cs2-options-content"))).unwrap_or(0.0);
+                let start = (ui.max_rect().left() + crate::cs2_well::WELL_LEFT - 44.0).max(content + 8.0);
+                let width = (ui.max_rect().right() - start).max(crate::cs2::WELL_AREA);
+                egui::Panel::right("cs2-palette-well").resizable(false).exact_size(width).frame(egui::Frame::NONE).show(ui, |ui| {
+                    if crate::cs2_well::well(app, ui, tl!("Open"))
+                        && let Err(e) = crate::menus::invoke(app, ui.ctx(), "file.open", json!({}))
                     {
                         app.ui.status = e;
                     }
@@ -226,6 +220,9 @@ pub fn options_bar(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
                         crate::brush_panel::commit_gesture(app, ui.ctx(), &brush_before, &brush);
                     });
                     reveal_focused_control(ui);
+                    // Where the tool options end, so the CS2 palette well can start after them.
+                    let right = ui.min_rect().right();
+                    ui.ctx().data_mut(|d| d.insert_temp(egui::Id::unique("cs2-options-content"), right));
                 });
             });
         });
