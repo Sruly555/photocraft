@@ -229,7 +229,39 @@ egui_demo_lib = { git = "https://github.com/storytold/egui.git", rev = "6d518fc7
 egui_inspection = { git = "https://github.com/storytold/egui.git", rev = "6d518fc799681571963842f95b55a6b68431b15a" }
 winit = { git = "https://github.com/storytold/winit.git", rev = "a517b3846ee8457d84ee4975110bfda6797c44dc" }
 # craft-pdf's vendored Hayro trees: consumers patch the same craft-libs revision (crates/pdf README).
-hayro = { git = "https://github.com/storytold/craft-libs", rev = "e2dc681a3" }
-hayro-syntax = { git = "https://github.com/storytold/craft-libs", rev = "e2dc681a3" }
-hayro-interpret = { git = "https://github.com/storytold/craft-libs", rev = "e2dc681a3" }
-hayro-jbig2 = { git = "https://github.com/storytold/craft-libs", rev = "e2dc681a3" }
+# Fork: the CS2 craft-libs fork revision (see the craft-libs patch below).
+hayro = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+hayro-syntax = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+hayro-interpret = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+hayro-jbig2 = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+
+# Fork: CS2 palette chrome needs craft-ui tab-row paint hooks (Sruly555/craft-libs, branch cs2-palettes).
+[patch."https://github.com/storytold/craft-libs"]
+craft-affinity = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-cms = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-crs = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-flags = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-heif = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-i18n = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-jpeg = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-kra = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-ora = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-pcraft-bundle = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-pcraft-format = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-pdf = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-pdn = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-print = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-psd = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-raw = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-svg = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-tiff = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-ui = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-update = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-xcf = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-xml = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-zip = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-docpath = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-eps = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-file-formats = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-idml = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
+craft-image-codecs = { git = "https://github.com/Sruly555/craft-libs", rev = "63145ae720cb15efdf5674be1fa00613988594b7" }
