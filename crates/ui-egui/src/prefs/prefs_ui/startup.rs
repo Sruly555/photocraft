@@ -44,6 +44,15 @@ pub fn load(app: &mut PhotocraftApp) {
     app.session.apply_prefs();
     crate::dock::restore(app);
     crate::color_panel_ui::restore(app);
+    // CS2 (the Classic light theme) had no Hue Cube: its Color palette opens on RGB sliders.
+    // At startup only, so a mode picked from the palette menu stands for the run.
+    let interface = &app.session.prefs().interface;
+    if interface.light_theme == photocraft_engine::prefs::LightTheme::Classic
+        && interface.appearance_mode != photocraft_engine::prefs::AppearanceMode::Dark
+        && app.ui.color_panel.mode == crate::state::ColorPanelMode::HueCube
+    {
+        app.ui.color_panel.mode = crate::state::ColorPanelMode::RgbSliders;
+    }
     crate::brush_picker::restore(app);
     crate::last_brush::restore(app);
     sync_rulers(app);

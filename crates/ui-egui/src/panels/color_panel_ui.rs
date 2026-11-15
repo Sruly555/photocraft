@@ -47,15 +47,6 @@ fn field_w(t: &Tokens) -> f32 {
 
 /// The Color tab: whatever the panel menu picked.
 pub(crate) fn panel(app: &mut PhotocraftApp, ui: &mut egui::Ui) {
-    // CS2 had no Hue Cube: the palette opens on its RGB sliders once per run. A later pick from
-    // the palette menu stands for the rest of the run.
-    let once = egui::Id::unique("cs2-color-sliders-once");
-    if crate::cs2::active() && !ui.data(|d| d.get_temp::<bool>(once).unwrap_or(false)) {
-        ui.data_mut(|d| d.insert_temp(once, true));
-        if app.ui.color_panel.mode == ColorPanelMode::HueCube {
-            app.ui.color_panel.mode = ColorPanelMode::RgbSliders;
-        }
-    }
     match app.ui.color_panel.mode {
         ColorPanelMode::HueCube | ColorPanelMode::BrightnessCube => crate::panels::color_field(app, ui),
         ColorPanelMode::ColorWheel => wheel(app, ui),
@@ -242,7 +233,7 @@ fn slider_rows(ui: &mut egui::Ui, model: Model, v: [f32; 4], background: bool, d
             if model == Model::Web {
                 changed |= hex_pair(ui, ui.scope_id().with(("web-field", i, background)), &mut x);
             } else if (if cs2 {
-                widgets::compact_value_field_named(ui, label, &mut x, lo..=hi, field_w, row_h)
+                widgets::compact_value_field_named(ui, &format!("{label} value"), &mut x, lo..=hi, field_w, row_h)
             } else {
                 widgets::value_field(ui, &mut x, lo..=hi, "", field_w)
             })

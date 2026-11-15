@@ -36,6 +36,9 @@ impl PhotocraftApp {
     /// Creates a new application state managing the engine session and UI services; the session
     /// keeps the services' automation policy as the gate actions automation wrote play under.
     pub fn new(mut session: Session, mut services: Services) -> Self {
+        // The CS2 key table follows the theme from the first frame; a new app starts without it,
+        // whatever an earlier app on this thread showed.
+        crate::cs2::set_active(false);
         session.updates.check = services.check_updates.take();
         // Actions automation wrote keep this gate when the user plays them. Batch and droplets
         // copy steps instead of the action, so they do not keep the gate yet.
