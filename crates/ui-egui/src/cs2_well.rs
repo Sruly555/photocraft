@@ -150,6 +150,17 @@ pub fn well(app: &mut PhotocraftApp, ui: &mut egui::Ui, browse_tip: &str) -> boo
                 }
             }
         });
+        let rects: Vec<Rect> = geometry.tabs.iter().map(|(_, r)| *r).collect();
+        // Dragged along the well: a line marks where the tab will go.
+        if response.dragged()
+            && let Some(p) = ui.ctx().pointer_interact_pos()
+            && drawn.well.expand(6.0).contains(p)
+            && let Some(x) = slot_x(&rects, index, drop_slot(&rects, index, p.x))
+        {
+            let painter = ui.ctx().layer_painter(egui::LayerId::new(egui::Order::Tooltip, egui::Id::unique("cs2-well-ghost")));
+            let r = drawn.well.shrink2(vec2(0.0, 2.0));
+            painter.line_segment([pos2(x, r.top()), pos2(x, r.bottom())], Stroke::new(2.0, crate::cs2::DROP_PREVIEW));
+        }
         if response.dragged()
             && let Some(p) = ui.ctx().pointer_interact_pos()
             && !drawn.well.expand(6.0).contains(p)
@@ -165,6 +176,14 @@ pub fn well(app: &mut PhotocraftApp, ui: &mut egui::Ui, browse_tip: &str) -> boo
         {
             ui.ctx().data_mut(|d| d.remove::<String>(open_id()));
             undock(app, id, p - vec2(20.0, 8.0));
+        } else if response.drag_stopped()
+            && let Some(p) = ui.ctx().pointer_interact_pos().or_else(|| ui.input(|i| i.pointer.latest_pos()))
+        {
+            // Let go inside the well: the tab moves to the marked place.
+            let to = drop_slot(&rects, index, p.x);
+            if to != index {
+                moved = Some((index, to));
+            }
         } else if response.clicked() {
             let again = open.as_deref() == Some(id.as_str());
             ui.ctx().data_mut(|d| {
@@ -181,6 +200,25 @@ pub fn well(app: &mut PhotocraftApp, ui: &mut egui::Ui, browse_tip: &str) -> boo
         set_panels(app, reorder(panels(app), &ids, from, to));
     }
     drawn.browse
+}
+
+/// Where the tab at `from`, dragged to `x`, ends up among the well's tabs (`rects`, left to
+/// right): past every other tab whose middle is left of `x`.
+fn drop_slot(rects: &[Rect], from: usize, x: f32) -> usize {
+    rects.iter().enumerate().filter(|(i, r)| *i != from && r.center().x < x).count()
+}
+
+/// The x of the insertion line for the tab at `from` going to `slot`: the right edge of the tab it
+/// follows, or the first other tab's left edge. `None` when nothing would move.
+fn slot_x(rects: &[Rect], from: usize, slot: usize) -> Option<f32> {
+    if slot == from {
+        return None;
+    }
+    let others: Vec<&Rect> = rects.iter().enumerate().filter(|(i, _)| *i != from).map(|(_, r)| r).collect();
+    match slot.checked_sub(1) {
+        Some(before) => others.get(before).map(|r| r.right()),
+        None => others.first().map(|r| r.left()),
+    }
 }
 
 /// `list` with the shown tab at `from` moved to shown position `to`. `shown` are the tabs the
@@ -282,6 +320,22 @@ mod tests {
         // An id the well can't show keeps its place in the stored list.
         let stored = ids(&["a", "x", "b", "c"]);
         assert_eq!(reorder(stored, &ids(&["a", "b", "c"]), 2, 0), ids(&["c", "a", "x", "b"]));
+    }
+
+    #[test]
+    fn a_tab_dragged_along_the_well_lands_past_the_tabs_left_of_the_pointer() {
+        // Three 60-point tabs at 0, 60 and 120.
+        let rects: Vec<Rect> = (0..3).map(|i| Rect::from_min_size(pos2(60.0 * i as f32, 0.0), vec2(60.0, 20.0))).collect();
+        assert_eq!(drop_slot(&rects, 0, 100.0), 1, "past the second tab's middle");
+        assert_eq!(drop_slot(&rects, 0, 170.0), 2, "past the last");
+        assert_eq!(drop_slot(&rects, 2, 10.0), 0, "before the first");
+        assert_eq!(drop_slot(&rects, 1, 70.0), 1, "in place");
+        assert_eq!(slot_x(&rects, 1, 1), None);
+        assert_eq!(slot_x(&rects, 2, 0), Some(0.0));
+        assert_eq!(slot_x(&rects, 0, 2), Some(180.0));
+        // The slot is the final index `reorder` takes.
+        let ids: Vec<String> = ["a", "b", "c"].iter().map(|s| (*s).to_owned()).collect();
+        assert_eq!(reorder(ids.clone(), &ids, 0, drop_slot(&rects, 0, 170.0)), ["b", "c", "a"]);
     }
 
     #[test]

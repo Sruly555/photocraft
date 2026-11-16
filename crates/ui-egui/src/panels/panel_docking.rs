@@ -399,6 +399,29 @@ fn install_cs2(app: &mut PhotocraftApp, area: egui::Rect) {
     commit(app, Workspace::new(cs2_layout(area)), Returns::default());
 }
 
+/// Floats every panel docked in the work area beside the canvas (CS2 has no docking there): each
+/// becomes a palette left of the default palette column, cascading down.
+fn float_cs2_docked(app: &mut PhotocraftApp, area: egui::Rect) {
+    let Some(mut workspace) = app.ui.docking.clone() else { return };
+    let floating: Vec<&String> = workspace.layout.floating.iter().flat_map(|f| f.panels()).collect();
+    let docked: Vec<String> = workspace.layout.panels().into_iter().filter(|p| p.as_str() != CANVAS && !floating.contains(p)).cloned().collect();
+    if docked.is_empty() {
+        return;
+    }
+    let width = 212.0;
+    let column = area.right() - crate::canvas::scrollbars::THICKNESS - 2.0 - width;
+    for (i, panel) in docked.iter().enumerate() {
+        let step = 22.0 * i as f32;
+        let rect = [column - width - 8.0 - step, area.top() + 40.0 + step, width, 280.0];
+        if workspace.apply(Action::Float { panel: panel.clone(), rect }, permissions).is_err() {
+            return;
+        }
+    }
+    let returns = app.ui.docking_returns.clone();
+    commit(app, workspace, returns);
+    app.ui.docking_reveal = docked.last().cloned();
+}
+
 /// Where the Studio themes' Properties card floats: inside the canvas's top right corner.
 fn studio_properties_rect(app: &PhotocraftApp) -> [f32; 4] {
     let (width, height) = (320.0, 440.0);
@@ -841,11 +864,14 @@ fn show_layout(app: &mut PhotocraftApp, ui: &mut egui::Ui, dock_only: bool) {
             app.ui.workspace = CS2_WORKSPACE.to_owned();
             app.ui.docking = None;
         }
-        // CS2 palettes only float. A layout with panels docked into the work area (saved before
-        // docking was turned off for CS2) is laid out afresh.
-        let docked = app.ui.docking.as_ref().is_some_and(|w| !matches!(&w.layout.root, Some(Node::Tabs { panels, .. }) if panels.iter().all(|p| p == CANVAS)));
-        if app.ui.workspace == CS2_WORKSPACE && (app.ui.docking.is_none() || docked) {
-            install_cs2(app, ui.available_rect_before_wrap());
+        // CS2 palettes only float: the preset is laid out once, and a palette that lands in the
+        // work area (Window > Character opens one in its home there) floats instead.
+        if app.ui.workspace == CS2_WORKSPACE {
+            if app.ui.docking.is_none() {
+                install_cs2(app, ui.available_rect_before_wrap());
+            } else {
+                float_cs2_docked(app, ui.available_rect_before_wrap());
+            }
         }
     }
     apply_pending_dock_width(app, ui.ctx());

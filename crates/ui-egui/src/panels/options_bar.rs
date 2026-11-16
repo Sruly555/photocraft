@@ -839,6 +839,10 @@ fn tool_specific_options(app: &mut PhotocraftApp, ui: &mut egui::Ui, t: Tokens, 
             }
             widgets::checkbox(ui, &mut app.ui.tool_options.zoom_scrubby, tl!("Scrubby Zoom"))
                 .on_hover_text(tl!("Click and move left or right to scale using the Zoom Tool (OpenGL only)"));
+            // The CS2 look leaves out the zoom buttons: nothing follows them in this bar.
+            if crate::theme::is_cs2(&t) {
+                return;
+            }
             // The same three buttons as the Hand bar, with the reference tooltips (#12068).
             if widgets::secondary_button(ui, "100%", 0.0).on_hover_text(tl!("Zoom current window to 1:1")).clicked()
                 && let Some(i) = app.session.active_index()

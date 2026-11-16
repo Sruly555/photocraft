@@ -2369,3 +2369,22 @@ fn native_migration_still_waits_and_runs_without_an_accepted_explicit_request() 
         assert!(h.ctx.data_mut(|data| data.get_persisted::<egui::PanelState>(key)).is_none(), "the unchanged native migration consumes its state once");
     }
 }
+
+#[test]
+fn a_palette_shown_into_the_cs2_work_area_floats_and_the_preset_stays() {
+    let mut app = app();
+    let area = egui::Rect::from_min_size(pos2(0.0, 60.0), vec2(1400.0, 740.0));
+    app.ui.docking = Some(Workspace::new(cs2_layout(area)));
+    // Window > Character opens the panel in its home beside the canvas.
+    let mut workspace = app.ui.docking.clone().unwrap();
+    workspace.apply(Action::OpenAt { panel: "character".into(), anchor: CANVAS.into(), placement: Placement::Split(Zone::Right) }, permissions).unwrap();
+    app.ui.docking = Some(workspace);
+    let preset: Vec<String> = cs2_layout(area).floating.iter().flat_map(|f| f.panels()).cloned().collect();
+
+    float_cs2_docked(&mut app, area);
+    let layout = lay(&app);
+    assert!(matches!(&layout.root, Some(Node::Tabs { panels, .. }) if panels == &[CANVAS.to_owned()]), "only the canvas stays docked: {:?}", layout.root);
+    let floating: Vec<&String> = layout.floating.iter().flat_map(|f| f.panels()).collect();
+    assert!(floating.iter().any(|p| p.as_str() == "character"), "Character floats");
+    assert!(preset.iter().all(|p| floating.contains(&p)), "the preset palettes stay where they were");
+}

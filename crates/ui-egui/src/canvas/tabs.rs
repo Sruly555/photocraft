@@ -1032,9 +1032,14 @@ fn cs2_document_windows(app: &mut PhotocraftApp, ctx: &egui::Context) {
                 win.open = false;
             }
         }
-        // Minimize: the tab area keeps the document it showed, in front.
+        // Minimize: the tab area keeps the document it showed, in front. Maximize: the document
+        // becomes the one in front of the tab area.
         if minimize && let Some(front) = app.main_document.filter(|d| *d != w.document) {
             app.session.set_active(front);
+        }
+        if maximize {
+            app.session.set_active(w.document);
+            app.main_document = Some(w.document);
         }
         if close {
             let _ = crate::menus::invoke(app, ctx, "file.close", json!({"document": w.document}));
